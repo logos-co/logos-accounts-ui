@@ -45,7 +45,8 @@
           # Individual outputs
           logos-accounts-ui-lib = lib;
           app = app;
-          
+          lib = lib;
+
           # Default package
           default = lib;
         }

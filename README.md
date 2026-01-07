@@ -21,7 +21,7 @@ The result will include:
 
 ```bash
 # Build only the library (plugin)
-nix build '.#logos-accounts-ui-lib'
+nix build '.#lib'
 
 # Build the standalone Qt application
 nix build '.#app'
