@@ -62,6 +62,7 @@
           buildInputs = [
             pkgs.qt6.qtbase
             pkgs.qt6.qtremoteobjects
+            pkgs.qt6.qtdeclarative
             pkgs.zstd
             pkgs.krb5
             pkgs.abseil-cpp

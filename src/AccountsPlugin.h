@@ -3,12 +3,12 @@
 #include <IComponent.h>
 #include <QObject>
 
-class AccountsUIComponent : public QObject, public IComponent {
+class AccountsPlugin : public QObject, public IComponent {
     Q_OBJECT
     Q_INTERFACES(IComponent)
-    Q_PLUGIN_METADATA(IID IComponent_iid FILE "metadata.json")
+    Q_PLUGIN_METADATA(IID IComponent_iid FILE "../metadata.json")
 
 public:
     Q_INVOKABLE QWidget* createWidget(LogosAPI* logosAPI = nullptr) override;
     void destroyWidget(QWidget* widget) override;
-}; 
+};
