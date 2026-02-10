@@ -68,7 +68,7 @@ if(NOT _cpp_sdk_found)
 endif()
 
 # Find Qt packages
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects Quick QuickWidgets)
 
 # Get the real path to handle symlinks correctly
 get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
@@ -88,19 +88,11 @@ endif()
 
 # Source files
 set(SOURCES
-    AccountsUIComponent.cpp
-    AccountsUIComponent.h
-    src/AccountsWidget.cpp
-    src/AccountsWidget.h
-    src/AccountsWindow.cpp
-    src/AccountsWindow.h
-    src/KeysWidget.cpp
-    src/KeysWidget.h
-    src/KeystoreWidget.cpp
-    src/KeystoreWidget.h
-    src/ExtKeystoreWidget.cpp
-    src/ExtKeystoreWidget.h
-    src/main.cpp
+    src/AccountsPlugin.cpp
+    src/AccountsPlugin.h
+    src/AccountsBackend.cpp
+    src/AccountsBackend.h
+    src/accounts_resources.qrc
 )
 
 # Add SDK sources (only if source layout, installed layout uses the library)
@@ -210,10 +202,12 @@ else()
 endif()
 
 # Link against libraries
-target_link_libraries(accounts_ui PRIVATE 
+target_link_libraries(accounts_ui PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::RemoteObjects
+    Qt6::Quick
+    Qt6::QuickWidgets
     component-interfaces
 )
 
