@@ -5,6 +5,7 @@
   "author": "Logos Core Team",
   "type": "ui",
   "main": "accounts_ui",
+  "icon": ":/icons/accounts.png",
   "dependencies": ["accounts_module"],
   "category": "accounts",
   "build": {

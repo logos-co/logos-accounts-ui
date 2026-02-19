@@ -2,5 +2,6 @@
 <RCC>
     <qresource prefix="/">
         <file alias="AccountsView.qml">AccountsView.qml</file>
+        <file>icons/accounts.png</file>
     </qresource>
 </RCC>
