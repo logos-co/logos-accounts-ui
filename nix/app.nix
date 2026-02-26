@@ -1,16 +1,16 @@
 # Builds the logos-accounts-ui-app standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosAccountsModule, logosCapabilityModule, logosAccountsUI }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosAccountsUI, lgpm, logosCapabilityModuleLgx, logosAccountsModuleLgx }:
 
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-accounts-ui-app";
   version = common.version;
-  
+
   inherit src;
   inherit (common) buildInputs cmakeFlags meta env;
-  
+
   # Add logosSdk to nativeBuildInputs for logos-cpp-generator
   nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk pkgs.patchelf pkgs.removeReferencesTo ];
-  
+
   # Provide Qt/GL runtime paths so the wrapper can inject them
   qtLibPath = pkgs.lib.makeLibraryPath (
     [
@@ -38,35 +38,35 @@ pkgs.stdenv.mkDerivation rec {
     ]
   );
   qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins";
-  
+
   # This is a GUI application, enable Qt wrapping
   dontWrapQtApps = false;
-  
+
   # This is an aggregate runtime layout; avoid stripping to prevent hook errors
   dontStrip = true;
-  
+
   # Ensure proper Qt environment setup via wrapper
   qtWrapperArgs = [
     "--prefix" "LD_LIBRARY_PATH" ":" qtLibPath
     "--prefix" "QT_PLUGIN_PATH" ":" qtPluginPath
   ];
-  
+
   preConfigure = ''
     runHook prePreConfigure
-    
+
     # Set macOS deployment target to match Qt frameworks
     export MACOSX_DEPLOYMENT_TARGET=12.0
-    
+
     # Copy logos-cpp-sdk headers to expected location
     echo "Copying logos-cpp-sdk headers for app..."
     mkdir -p ./logos-cpp-sdk/include/cpp
     cp -r ${logosSdk}/include/cpp/* ./logos-cpp-sdk/include/cpp/
-    
+
     # Also copy core headers
     echo "Copying core headers..."
     mkdir -p ./logos-cpp-sdk/include/core
     cp -r ${logosSdk}/include/core/* ./logos-cpp-sdk/include/core/
-    
+
     # Copy SDK library files to lib directory
     echo "Copying SDK library files..."
     mkdir -p ./logos-cpp-sdk/lib
@@ -77,18 +77,18 @@ pkgs.stdenv.mkDerivation rec {
     elif [ -f "${logosSdk}/lib/liblogos_sdk.a" ]; then
       cp "${logosSdk}/lib/liblogos_sdk.a" ./logos-cpp-sdk/lib/
     fi
-    
+
     runHook postPreConfigure
   '';
-  
+
   # Additional environment variables for Qt and RPATH cleanup
   preFixup = ''
     runHook prePreFixup
-    
+
     # Set up Qt environment variables
     export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins"
     export QML_IMPORT_PATH="${pkgs.qt6.qtbase}/lib/qt-6/qml"
-    
+
     # Remove any remaining references to /build/ in binaries and set proper RPATH
     find $out -type f -executable -exec sh -c '
       if file "$1" | grep -q "ELF.*executable"; then
@@ -104,7 +104,7 @@ pkgs.stdenv.mkDerivation rec {
         fi
       fi
     ' _ {} \;
-    
+
     # Also clean up shared libraries
     find $out -name "*.so" -exec sh -c '
       if patchelf --print-rpath "$1" 2>/dev/null | grep -q "/build/"; then
@@ -112,27 +112,23 @@ pkgs.stdenv.mkDerivation rec {
         patchelf --remove-rpath "$1" 2>/dev/null || true
       fi
     ' _ {} \;
-    
+
     runHook prePostFixup
   '';
-  
+
   configurePhase = ''
     runHook preConfigure
-    
+
     echo "Configuring logos-accounts-ui-app..."
     echo "liblogos: ${logosLiblogos}"
     echo "cpp-sdk: ${logosSdk}"
-    echo "accounts-module: ${logosAccountsModule}"
-    echo "capability-module: ${logosCapabilityModule}"
     echo "accounts-ui: ${logosAccountsUI}"
-    
+
     # Verify that the built components exist
     test -d "${logosLiblogos}" || (echo "liblogos not found" && exit 1)
     test -d "${logosSdk}" || (echo "cpp-sdk not found" && exit 1)
-    test -d "${logosAccountsModule}" || (echo "accounts-module not found" && exit 1)
-    test -d "${logosCapabilityModule}" || (echo "capability-module not found" && exit 1)
     test -d "${logosAccountsUI}" || (echo "accounts-ui not found" && exit 1)
-    
+
     cmake -S app -B build \
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
@@ -142,31 +138,31 @@ pkgs.stdenv.mkDerivation rec {
       -DCMAKE_SKIP_BUILD_RPATH=TRUE \
       -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos} \
       -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk
-    
+
     runHook postConfigure
   '';
-  
+
   buildPhase = ''
     runHook preBuild
-    
+
     cmake --build build
     echo "logos-accounts-ui-app built successfully!"
-    
+
     runHook postBuild
   '';
-  
+
   installPhase = ''
     runHook preInstall
-    
+
     # Create output directories
     mkdir -p $out/bin $out/lib $out/modules
-    
+
     # Install our app binary
     if [ -f "build/bin/logos-accounts-ui-app" ]; then
       cp build/bin/logos-accounts-ui-app "$out/bin/"
       echo "Installed logos-accounts-ui-app binary"
     fi
-    
+
     # Copy the core binaries from liblogos
     if [ -f "${logosLiblogos}/bin/logoscore" ]; then
       cp -L "${logosLiblogos}/bin/logoscore" "$out/bin/"
@@ -176,12 +172,12 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${logosLiblogos}/bin/logos_host" "$out/bin/"
       echo "Installed logos_host binary"
     fi
-    
+
     # Copy required shared libraries from liblogos
     if ls "${logosLiblogos}/lib/"liblogos_core.* >/dev/null 2>&1; then
       cp -L "${logosLiblogos}/lib/"liblogos_core.* "$out/lib/" || true
     fi
-    
+
     # Copy SDK library if it exists
     if ls "${logosSdk}/lib/"liblogos_sdk.* >/dev/null 2>&1; then
       cp -L "${logosSdk}/lib/"liblogos_sdk.* "$out/lib/" || true
@@ -195,13 +191,15 @@ pkgs.stdenv.mkDerivation rec {
       MINGW*|MSYS*|CYGWIN*) OS_EXT="dll";;
     esac
 
-    # Copy module plugins into the modules directory
-    if [ -f "${logosCapabilityModule}/lib/capability_module_plugin.$OS_EXT" ]; then
-      cp -L "${logosCapabilityModule}/lib/capability_module_plugin.$OS_EXT" "$out/modules/"
-    fi
-    if [ -f "${logosAccountsModule}/lib/accounts_module_plugin.$OS_EXT" ]; then
-      cp -L "${logosAccountsModule}/lib/accounts_module_plugin.$OS_EXT" "$out/modules/"
-    fi
+    # Install module plugins via lgpm from .lgx bundles
+    for lgxFile in ${logosCapabilityModuleLgx}/*.lgx; do
+      echo "Installing $lgxFile via lgpm..."
+      ${lgpm}/bin/lgpm --modules-dir "$out/modules" install --file "$lgxFile"
+    done
+    for lgxFile in ${logosAccountsModuleLgx}/*.lgx; do
+      echo "Installing $lgxFile via lgpm..."
+      ${lgpm}/bin/lgpm --modules-dir "$out/modules" install --file "$lgxFile"
+    done
     # Copy accounts_ui Qt plugin to root directory (not modules, as it's loaded differently)
     if [ -f "${logosAccountsUI}/lib/accounts_ui.$OS_EXT" ]; then
       cp -L "${logosAccountsUI}/lib/accounts_ui.$OS_EXT" "$out/"
@@ -213,8 +211,6 @@ Logos Accounts UI App - Build Information
 =====================================
 liblogos: ${logosLiblogos}
 cpp-sdk: ${logosSdk}
-accounts-module: ${logosAccountsModule}
-capability-module: ${logosCapabilityModule}
 accounts-ui: ${logosAccountsUI}
 
 Runtime Layout:
@@ -226,7 +222,7 @@ Runtime Layout:
 Usage:
   $out/bin/logos-accounts-ui-app
 EOF
-    
+
     runHook postInstall
   '';
 }
