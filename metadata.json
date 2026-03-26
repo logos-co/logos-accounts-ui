@@ -1,27 +1,19 @@
 {
   "name": "accounts_ui",
   "version": "1.0.0",
-  "description": "Accounts interface for the Logos application",
-  "author": "Logos Core Team",
   "type": "ui",
-  "main": "accounts_ui",
-  "icon": ":/icons/accounts.png",
-  "dependencies": ["accounts_module"],
   "category": "accounts",
-  "build": {
-    "type": "cmake",
-    "files": [
-      "src/accounts_ui_plugin.cpp",
-      "src/accounts_ui_plugin.h",
-      "src/accountswindow.cpp",
-      "src/accountswindow.h",
-      "src/accountswidget.cpp",
-      "src/accountswidget.h",
-      "src/accounts_ui_resources.qrc"
-    ]
-  },
-  "capabilities": [
-    "ui_components",
-    "accounts"
-  ]
-} 
+  "description": "Accounts interface for the Logos application",
+  "main": "accounts_ui_plugin",
+  "icon": "src/icons/accounts.png",
+  "dependencies": ["accounts_module"],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": ["qt6.qtdeclarative", "zstd", "krb5", "abseil-cpp"]
+    },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [] }
+  }
+}
