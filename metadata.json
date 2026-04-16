@@ -1,11 +1,12 @@
 {
   "name": "accounts_ui",
   "version": "1.0.0",
-  "type": "ui",
+  "type": "ui_qml",
   "category": "accounts",
   "description": "Accounts interface for the Logos application",
   "main": "accounts_ui_plugin",
   "icon": "src/icons/accounts.png",
+  "view": "qml/AccountsView.qml",
   "dependencies": ["accounts_module"],
 
   "nix": {

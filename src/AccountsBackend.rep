@@ -1,0 +1,61 @@
+#include <QStringList>
+
+class AccountsBackend
+{
+    PROP(QString status READONLY)
+    PROP(QStringList keystoreAccounts READONLY)
+    PROP(QStringList extKeystoreAccounts READONLY)
+
+    // Keys operations
+    SLOT(QString createRandomMnemonic(int length))
+    SLOT(QString createRandomMnemonicDefault())
+    SLOT(int lengthToEntropyStrength(int length))
+    SLOT(QString createExtKeyFromMnemonic(QString phrase, QString passphrase))
+    SLOT(QString deriveExtKey(QString extKey, QString path))
+    SLOT(QString extKeyToECDSA(QString extKey))
+    SLOT(QString ecdsaToPublicKey(QString privateKeyHex))
+    SLOT(QString publicKeyToAddress(QString publicKeyHex))
+
+    // Keystore operations
+    SLOT(bool initKeystore(QString dir, int scryptN, int scryptP))
+    SLOT(bool closeKeystore())
+    SLOT(void refreshKeystoreAccounts())
+    SLOT(QString keystoreNewAccount(QString passphrase))
+    SLOT(QString keystoreImport(QString keyJSON, QString passphrase, QString newPassphrase))
+    SLOT(QString keystoreExport(QString address, QString passphrase, QString newPassphrase))
+    SLOT(bool keystoreDelete(QString address, QString passphrase))
+    SLOT(bool keystoreHasAddress(QString address))
+    SLOT(bool keystoreUnlock(QString address, QString passphrase))
+    SLOT(bool keystoreLock(QString address))
+    SLOT(bool keystoreTimedUnlock(QString address, QString passphrase, int timeout))
+    SLOT(bool keystoreUpdate(QString address, QString passphrase, QString newPassphrase))
+    SLOT(QString keystoreSignHash(QString address, QString hashHex))
+    SLOT(QString keystoreSignHashWithPassphrase(QString address, QString passphrase, QString hashHex))
+    SLOT(QString keystoreImportECDSA(QString privateKeyHex, QString passphrase))
+    SLOT(QString keystoreSignTx(QString address, QString txJSON, QString chainIDHex))
+    SLOT(QString keystoreSignTxWithPassphrase(QString address, QString passphrase, QString txJSON, QString chainIDHex))
+    SLOT(QString keystoreFind(QString address, QString url))
+
+    // Extended Keystore operations
+    SLOT(bool initExtKeystore(QString dir, int scryptN, int scryptP))
+    SLOT(bool closeExtKeystore())
+    SLOT(void refreshExtKeystoreAccounts())
+    SLOT(QString extKeystoreNewAccount(QString passphrase))
+    SLOT(QString extKeystoreImport(QString keyJSON, QString passphrase, QString newPassphrase))
+    SLOT(QString extKeystoreExportExt(QString address, QString passphrase, QString newPassphrase))
+    SLOT(QString extKeystoreExportPriv(QString address, QString passphrase, QString newPassphrase))
+    SLOT(bool extKeystoreDelete(QString address, QString passphrase))
+    SLOT(bool extKeystoreHasAddress(QString address))
+    SLOT(bool extKeystoreUnlock(QString address, QString passphrase))
+    SLOT(bool extKeystoreLock(QString address))
+    SLOT(bool extKeystoreTimedUnlock(QString address, QString passphrase, int timeout))
+    SLOT(bool extKeystoreUpdate(QString address, QString passphrase, QString newPassphrase))
+    SLOT(QString extKeystoreSignHash(QString address, QString hashHex))
+    SLOT(QString extKeystoreSignHashWithPassphrase(QString address, QString passphrase, QString hashHex))
+    SLOT(QString extKeystoreImportExtendedKey(QString extKey, QString passphrase))
+    SLOT(QString extKeystoreSignTx(QString address, QString txJSON, QString chainIDHex))
+    SLOT(QString extKeystoreSignTxWithPassphrase(QString address, QString passphrase, QString txJSON, QString chainIDHex))
+    SLOT(QString extKeystoreDerive(QString address, QString path, int pin))
+    SLOT(QString extKeystoreDeriveWithPassphrase(QString address, QString path, int pin, QString passphrase, QString newPassphrase))
+    SLOT(QString extKeystoreFind(QString address, QString url))
+}
