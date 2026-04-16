@@ -6,6 +6,9 @@ Rectangle {
     id: root
     color: _d.bgColor
 
+    // Backend via logos view module system (replaces context property)
+    readonly property var backend: typeof logos !== "undefined" && logos ? logos.module("accounts_ui") : null
+
     QtObject {
         id: _d
 
@@ -146,8 +149,10 @@ Rectangle {
                             text: "Create Random Mnemonic"
                             onClicked: {
                                 var len = mnemonicLengthInput.text
-                                var result = len === "" ? backend.createRandomMnemonicDefault() : backend.createRandomMnemonic(parseInt(len))
-                                mnemonicResult.text = result || "Failed to create mnemonic"
+                                var pending = len === "" ? backend.createRandomMnemonicDefault() : backend.createRandomMnemonic(parseInt(len))
+                                logos.watch(pending,
+                                    function(result) { mnemonicResult.text = result || "Failed to create mnemonic" },
+                                    function(error)  { mnemonicResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -166,8 +171,9 @@ Rectangle {
                         StyledButton {
                             text: "Length To Entropy Strength"
                             onClicked: {
-                                var result = backend.lengthToEntropyStrength(parseInt(entropyLengthInput.text))
-                                entropyResult.text = result.toString()
+                                logos.watch(backend.lengthToEntropyStrength(parseInt(entropyLengthInput.text)),
+                                    function(result) { entropyResult.text = result.toString() },
+                                    function(error)  { entropyResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -194,8 +200,9 @@ Rectangle {
                         StyledButton {
                             text: "Create Extended Key"
                             onClicked: {
-                                var result = backend.createExtKeyFromMnemonic(extKeyMnemonicInput.text, extKeyPassphraseInput.text)
-                                extKeyResult.text = result || "Failed to create extended key"
+                                logos.watch(backend.createExtKeyFromMnemonic(extKeyMnemonicInput.text, extKeyPassphraseInput.text),
+                                    function(result) { extKeyResult.text = result || "Failed to create extended key" },
+                                    function(error)  { extKeyResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -220,8 +227,9 @@ Rectangle {
                         StyledButton {
                             text: "Derive"
                             onClicked: {
-                                var result = backend.deriveExtKey(deriveExtKeyInput.text, deriveExtKeyPathInput.text)
-                                deriveExtKeyResult.text = result || "Derivation failed"
+                                logos.watch(backend.deriveExtKey(deriveExtKeyInput.text, deriveExtKeyPathInput.text),
+                                    function(result) { deriveExtKeyResult.text = result || "Derivation failed" },
+                                    function(error)  { deriveExtKeyResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -240,8 +248,9 @@ Rectangle {
                         StyledButton {
                             text: "Ext Key To ECDSA"
                             onClicked: {
-                                var result = backend.extKeyToECDSA(extKeyToECDSAInput.text)
-                                extKeyToECDSAResult.text = result || "Conversion failed"
+                                logos.watch(backend.extKeyToECDSA(extKeyToECDSAInput.text),
+                                    function(result) { extKeyToECDSAResult.text = result || "Conversion failed" },
+                                    function(error)  { extKeyToECDSAResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -260,8 +269,9 @@ Rectangle {
                         StyledButton {
                             text: "ECDSA To Public Key"
                             onClicked: {
-                                var result = backend.ecdsaToPublicKey(ecdsaToPublicKeyInput.text)
-                                ecdsaToPublicKeyResult.text = result || "Conversion failed"
+                                logos.watch(backend.ecdsaToPublicKey(ecdsaToPublicKeyInput.text),
+                                    function(result) { ecdsaToPublicKeyResult.text = result || "Conversion failed" },
+                                    function(error)  { ecdsaToPublicKeyResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -280,8 +290,9 @@ Rectangle {
                         StyledButton {
                             text: "Public Key To Address"
                             onClicked: {
-                                var result = backend.publicKeyToAddress(publicKeyToAddressInput.text)
-                                publicKeyToAddressResult.text = result || "Conversion failed"
+                                logos.watch(backend.publicKeyToAddress(publicKeyToAddressInput.text),
+                                    function(result) { publicKeyToAddressResult.text = result || "Conversion failed" },
+                                    function(error)  { publicKeyToAddressResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -390,8 +401,9 @@ Rectangle {
                         StyledButton {
                             text: "New Account"
                             onClicked: {
-                                var result = backend.keystoreNewAccount(ksNewPassphraseInput.text)
-                                if (result) ksNewPassphraseInput.text = ""
+                                logos.watch(backend.keystoreNewAccount(ksNewPassphraseInput.text),
+                                    function(result) { if (result) ksNewPassphraseInput.text = "" },
+                                    function(error)  { console.log("keystoreNewAccount error:", error) })
                             }
                         }
                     }
@@ -422,8 +434,9 @@ Rectangle {
                         StyledButton {
                             text: "Import"
                             onClicked: {
-                                var result = backend.keystoreImport(ksImportKeyJSONInput.text, ksImportPassphraseInput.text, ksImportNewPassphraseInput.text)
-                                if (result) { ksImportKeyJSONInput.text = ""; ksImportPassphraseInput.text = ""; ksImportNewPassphraseInput.text = "" }
+                                logos.watch(backend.keystoreImport(ksImportKeyJSONInput.text, ksImportPassphraseInput.text, ksImportNewPassphraseInput.text),
+                                    function(result) { if (result) { ksImportKeyJSONInput.text = ""; ksImportPassphraseInput.text = ""; ksImportNewPassphraseInput.text = "" } },
+                                    function(error)  { console.log("keystoreImport error:", error) })
                             }
                         }
                     }
@@ -453,8 +466,9 @@ Rectangle {
                         StyledButton {
                             text: "Export"
                             onClicked: {
-                                var result = backend.keystoreExport(ksExportAddressInput.text, ksExportPassphraseInput.text, ksExportNewPassphraseInput.text)
-                                ksExportResult.text = result || "Export failed"
+                                logos.watch(backend.keystoreExport(ksExportAddressInput.text, ksExportPassphraseInput.text, ksExportNewPassphraseInput.text),
+                                    function(result) { ksExportResult.text = result || "Export failed" },
+                                    function(error)  { ksExportResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -496,8 +510,9 @@ Rectangle {
                         StyledButton {
                             text: "Has Address"
                             onClicked: {
-                                var result = backend.keystoreHasAddress(ksHasAddressInput.text)
-                                ksHasAddressResult.text = result ? "true" : "false"
+                                logos.watch(backend.keystoreHasAddress(ksHasAddressInput.text),
+                                    function(result) { ksHasAddressResult.text = result ? "true" : "false" },
+                                    function(error)  { ksHasAddressResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -611,8 +626,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Hash"
                             onClicked: {
-                                var result = backend.keystoreSignHash(ksSignHashAddressInput.text, ksSignHashHashInput.text)
-                                ksSignHashResult.text = result || "Signing failed"
+                                logos.watch(backend.keystoreSignHash(ksSignHashAddressInput.text, ksSignHashHashInput.text),
+                                    function(result) { ksSignHashResult.text = result || "Signing failed" },
+                                    function(error)  { ksSignHashResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -643,8 +659,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Hash With Passphrase"
                             onClicked: {
-                                var result = backend.keystoreSignHashWithPassphrase(ksSignHashWPAddressInput.text, ksSignHashWPPassphraseInput.text, ksSignHashWPHashInput.text)
-                                ksSignHashWPResult.text = result || "Signing failed"
+                                logos.watch(backend.keystoreSignHashWithPassphrase(ksSignHashWPAddressInput.text, ksSignHashWPPassphraseInput.text, ksSignHashWPHashInput.text),
+                                    function(result) { ksSignHashWPResult.text = result || "Signing failed" },
+                                    function(error)  { ksSignHashWPResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -670,8 +687,9 @@ Rectangle {
                         StyledButton {
                             text: "Import ECDSA"
                             onClicked: {
-                                var result = backend.keystoreImportECDSA(ksImportECDSAKeyInput.text, ksImportECDSAPassphraseInput.text)
-                                ksImportECDSAResult.text = result || "Import failed"
+                                logos.watch(backend.keystoreImportECDSA(ksImportECDSAKeyInput.text, ksImportECDSAPassphraseInput.text),
+                                    function(result) { ksImportECDSAResult.text = result || "Import failed" },
+                                    function(error)  { ksImportECDSAResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -702,8 +720,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Transaction"
                             onClicked: {
-                                var result = backend.keystoreSignTx(ksSignTxAddressInput.text, ksSignTxJSONInput.text, ksSignTxChainIDInput.text)
-                                ksSignTxResult.text = result || "Signing failed"
+                                logos.watch(backend.keystoreSignTx(ksSignTxAddressInput.text, ksSignTxJSONInput.text, ksSignTxChainIDInput.text),
+                                    function(result) { ksSignTxResult.text = result || "Signing failed" },
+                                    function(error)  { ksSignTxResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -740,8 +759,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Transaction With Passphrase"
                             onClicked: {
-                                var result = backend.keystoreSignTxWithPassphrase(ksSignTxWPAddressInput.text, ksSignTxWPPassphraseInput.text, ksSignTxWPJSONInput.text, ksSignTxWPChainIDInput.text)
-                                ksSignTxWPResult.text = result || "Signing failed"
+                                logos.watch(backend.keystoreSignTxWithPassphrase(ksSignTxWPAddressInput.text, ksSignTxWPPassphraseInput.text, ksSignTxWPJSONInput.text, ksSignTxWPChainIDInput.text),
+                                    function(result) { ksSignTxWPResult.text = result || "Signing failed" },
+                                    function(error)  { ksSignTxWPResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -766,8 +786,9 @@ Rectangle {
                         StyledButton {
                             text: "Find"
                             onClicked: {
-                                var result = backend.keystoreFind(ksFindAddressInput.text, ksFindUrlInput.text)
-                                ksFindResult.text = result || "Not found"
+                                logos.watch(backend.keystoreFind(ksFindAddressInput.text, ksFindUrlInput.text),
+                                    function(result) { ksFindResult.text = result || "Not found" },
+                                    function(error)  { ksFindResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -876,8 +897,9 @@ Rectangle {
                         StyledButton {
                             text: "New Account"
                             onClicked: {
-                                var result = backend.extKeystoreNewAccount(eksNewPassphraseInput.text)
-                                if (result) eksNewPassphraseInput.text = ""
+                                logos.watch(backend.extKeystoreNewAccount(eksNewPassphraseInput.text),
+                                    function(result) { if (result) eksNewPassphraseInput.text = "" },
+                                    function(error)  { console.log("extKeystoreNewAccount error:", error) })
                             }
                         }
                     }
@@ -908,8 +930,9 @@ Rectangle {
                         StyledButton {
                             text: "Import"
                             onClicked: {
-                                var result = backend.extKeystoreImport(eksImportKeyJSONInput.text, eksImportPassphraseInput.text, eksImportNewPassphraseInput.text)
-                                if (result) { eksImportKeyJSONInput.text = ""; eksImportPassphraseInput.text = ""; eksImportNewPassphraseInput.text = "" }
+                                logos.watch(backend.extKeystoreImport(eksImportKeyJSONInput.text, eksImportPassphraseInput.text, eksImportNewPassphraseInput.text),
+                                    function(result) { if (result) { eksImportKeyJSONInput.text = ""; eksImportPassphraseInput.text = ""; eksImportNewPassphraseInput.text = "" } },
+                                    function(error)  { console.log("extKeystoreImport error:", error) })
                             }
                         }
                     }
@@ -939,8 +962,9 @@ Rectangle {
                         StyledButton {
                             text: "Export"
                             onClicked: {
-                                var result = backend.extKeystoreExportExt(eksExportExtAddressInput.text, eksExportExtPassphraseInput.text, eksExportExtNewPassphraseInput.text)
-                                eksExportExtResult.text = result || "Export failed"
+                                logos.watch(backend.extKeystoreExportExt(eksExportExtAddressInput.text, eksExportExtPassphraseInput.text, eksExportExtNewPassphraseInput.text),
+                                    function(result) { eksExportExtResult.text = result || "Export failed" },
+                                    function(error)  { eksExportExtResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -972,8 +996,9 @@ Rectangle {
                         StyledButton {
                             text: "Export Private Key"
                             onClicked: {
-                                var result = backend.extKeystoreExportPriv(eksExportPrivAddressInput.text, eksExportPrivPassphraseInput.text, eksExportPrivNewPassphraseInput.text)
-                                eksExportPrivResult.text = result || "Export failed"
+                                logos.watch(backend.extKeystoreExportPriv(eksExportPrivAddressInput.text, eksExportPrivPassphraseInput.text, eksExportPrivNewPassphraseInput.text),
+                                    function(result) { eksExportPrivResult.text = result || "Export failed" },
+                                    function(error)  { eksExportPrivResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1015,8 +1040,9 @@ Rectangle {
                         StyledButton {
                             text: "Has Address"
                             onClicked: {
-                                var result = backend.extKeystoreHasAddress(eksHasAddressInput.text)
-                                eksHasAddressResult.text = result ? "true" : "false"
+                                logos.watch(backend.extKeystoreHasAddress(eksHasAddressInput.text),
+                                    function(result) { eksHasAddressResult.text = result ? "true" : "false" },
+                                    function(error)  { eksHasAddressResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1130,8 +1156,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Hash"
                             onClicked: {
-                                var result = backend.extKeystoreSignHash(eksSignHashAddressInput.text, eksSignHashHashInput.text)
-                                eksSignHashResult.text = result || "Signing failed"
+                                logos.watch(backend.extKeystoreSignHash(eksSignHashAddressInput.text, eksSignHashHashInput.text),
+                                    function(result) { eksSignHashResult.text = result || "Signing failed" },
+                                    function(error)  { eksSignHashResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1162,8 +1189,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Hash With Passphrase"
                             onClicked: {
-                                var result = backend.extKeystoreSignHashWithPassphrase(eksSignHashWPAddressInput.text, eksSignHashWPPassphraseInput.text, eksSignHashWPHashInput.text)
-                                eksSignHashWPResult.text = result || "Signing failed"
+                                logos.watch(backend.extKeystoreSignHashWithPassphrase(eksSignHashWPAddressInput.text, eksSignHashWPPassphraseInput.text, eksSignHashWPHashInput.text),
+                                    function(result) { eksSignHashWPResult.text = result || "Signing failed" },
+                                    function(error)  { eksSignHashWPResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1189,8 +1217,9 @@ Rectangle {
                         StyledButton {
                             text: "Import Extended Key"
                             onClicked: {
-                                var result = backend.extKeystoreImportExtendedKey(eksImportExtKeyInput.text, eksImportExtKeyPassphraseInput.text)
-                                eksImportExtKeyResult.text = result || "Import failed"
+                                logos.watch(backend.extKeystoreImportExtendedKey(eksImportExtKeyInput.text, eksImportExtKeyPassphraseInput.text),
+                                    function(result) { eksImportExtKeyResult.text = result || "Import failed" },
+                                    function(error)  { eksImportExtKeyResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1221,8 +1250,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Transaction"
                             onClicked: {
-                                var result = backend.extKeystoreSignTx(eksSignTxAddressInput.text, eksSignTxJSONInput.text, eksSignTxChainIDInput.text)
-                                eksSignTxResult.text = result || "Signing failed"
+                                logos.watch(backend.extKeystoreSignTx(eksSignTxAddressInput.text, eksSignTxJSONInput.text, eksSignTxChainIDInput.text),
+                                    function(result) { eksSignTxResult.text = result || "Signing failed" },
+                                    function(error)  { eksSignTxResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1259,8 +1289,9 @@ Rectangle {
                         StyledButton {
                             text: "Sign Transaction With Passphrase"
                             onClicked: {
-                                var result = backend.extKeystoreSignTxWithPassphrase(eksSignTxWPAddressInput.text, eksSignTxWPPassphraseInput.text, eksSignTxWPJSONInput.text, eksSignTxWPChainIDInput.text)
-                                eksSignTxWPResult.text = result || "Signing failed"
+                                logos.watch(backend.extKeystoreSignTxWithPassphrase(eksSignTxWPAddressInput.text, eksSignTxWPPassphraseInput.text, eksSignTxWPJSONInput.text, eksSignTxWPChainIDInput.text),
+                                    function(result) { eksSignTxWPResult.text = result || "Signing failed" },
+                                    function(error)  { eksSignTxWPResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1290,8 +1321,9 @@ Rectangle {
                         StyledButton {
                             text: "Derive"
                             onClicked: {
-                                var result = backend.extKeystoreDerive(eksDeriveAddressInput.text, eksDerivePathInput.text, parseInt(eksDerivePinInput.text))
-                                eksDeriveResult.text = result || "Derivation failed"
+                                logos.watch(backend.extKeystoreDerive(eksDeriveAddressInput.text, eksDerivePathInput.text, parseInt(eksDerivePinInput.text)),
+                                    function(result) { eksDeriveResult.text = result || "Derivation failed" },
+                                    function(error)  { eksDeriveResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1336,8 +1368,9 @@ Rectangle {
                         StyledButton {
                             text: "Derive With Passphrase"
                             onClicked: {
-                                var result = backend.extKeystoreDeriveWithPassphrase(eksDeriveWPAddressInput.text, eksDeriveWPPathInput.text, parseInt(eksDeriveWPPinInput.text), eksDeriveWPPassphraseInput.text, eksDeriveWPNewPassphraseInput.text)
-                                eksDeriveWPResult.text = result || "Derivation failed"
+                                logos.watch(backend.extKeystoreDeriveWithPassphrase(eksDeriveWPAddressInput.text, eksDeriveWPPathInput.text, parseInt(eksDeriveWPPinInput.text), eksDeriveWPPassphraseInput.text, eksDeriveWPNewPassphraseInput.text),
+                                    function(result) { eksDeriveWPResult.text = result || "Derivation failed" },
+                                    function(error)  { eksDeriveWPResult.text = "Error: " + error })
                             }
                         }
                     }
@@ -1362,8 +1395,9 @@ Rectangle {
                         StyledButton {
                             text: "Find"
                             onClicked: {
-                                var result = backend.extKeystoreFind(eksFindAddressInput.text, eksFindUrlInput.text)
-                                eksFindResult.text = result || "Not found"
+                                logos.watch(backend.extKeystoreFind(eksFindAddressInput.text, eksFindUrlInput.text),
+                                    function(result) { eksFindResult.text = result || "Not found" },
+                                    function(error)  { eksFindResult.text = "Error: " + error })
                             }
                         }
                     }

@@ -1,90 +1,78 @@
 #pragma once
 
-#include <QObject>
-#include <QStringList>
+#include "rep_AccountsBackend_source.h"
 #include "logos_api.h"
-#include "logos_api_client.h"
 #include "logos_sdk.h"
 
-class AccountsBackend : public QObject {
-    Q_OBJECT
+#include <QObject>
+#include <QString>
+#include <QStringList>
 
-    Q_PROPERTY(QString status READ status NOTIFY statusChanged)
-    Q_PROPERTY(QStringList keystoreAccounts READ keystoreAccountsList NOTIFY keystoreAccountsChanged)
-    Q_PROPERTY(QStringList extKeystoreAccounts READ extKeystoreAccountsList NOTIFY extKeystoreAccountsChanged)
+class AccountsBackend : public AccountsBackendSimpleSource
+{
+    Q_OBJECT
 
 public:
     explicit AccountsBackend(LogosAPI* logosAPI, QObject* parent = nullptr);
-    ~AccountsBackend();
+    ~AccountsBackend() override;
 
-    QString status() const { return m_status; }
-    QStringList keystoreAccountsList() const { return m_keystoreAccounts; }
-    QStringList extKeystoreAccountsList() const { return m_extKeystoreAccounts; }
+public slots:
+    // Keys operations
+    QString createRandomMnemonic(int length) override;
+    QString createRandomMnemonicDefault() override;
+    int lengthToEntropyStrength(int length) override;
+    QString createExtKeyFromMnemonic(QString phrase, QString passphrase) override;
+    QString deriveExtKey(QString extKey, QString path) override;
+    QString extKeyToECDSA(QString extKey) override;
+    QString ecdsaToPublicKey(QString privateKeyHex) override;
+    QString publicKeyToAddress(QString publicKeyHex) override;
 
-    // --- Keys operations ---
-    Q_INVOKABLE QString createRandomMnemonic(int length);
-    Q_INVOKABLE QString createRandomMnemonicDefault();
-    Q_INVOKABLE int lengthToEntropyStrength(int length);
-    Q_INVOKABLE QString createExtKeyFromMnemonic(const QString& phrase, const QString& passphrase);
-    Q_INVOKABLE QString deriveExtKey(const QString& extKey, const QString& path);
-    Q_INVOKABLE QString extKeyToECDSA(const QString& extKey);
-    Q_INVOKABLE QString ecdsaToPublicKey(const QString& privateKeyHex);
-    Q_INVOKABLE QString publicKeyToAddress(const QString& publicKeyHex);
+    // Keystore operations
+    bool initKeystore(QString dir, int scryptN, int scryptP) override;
+    bool closeKeystore() override;
+    void refreshKeystoreAccounts() override;
+    QString keystoreNewAccount(QString passphrase) override;
+    QString keystoreImport(QString keyJSON, QString passphrase, QString newPassphrase) override;
+    QString keystoreExport(QString address, QString passphrase, QString newPassphrase) override;
+    bool keystoreDelete(QString address, QString passphrase) override;
+    bool keystoreHasAddress(QString address) override;
+    bool keystoreUnlock(QString address, QString passphrase) override;
+    bool keystoreLock(QString address) override;
+    bool keystoreTimedUnlock(QString address, QString passphrase, int timeout) override;
+    bool keystoreUpdate(QString address, QString passphrase, QString newPassphrase) override;
+    QString keystoreSignHash(QString address, QString hashHex) override;
+    QString keystoreSignHashWithPassphrase(QString address, QString passphrase, QString hashHex) override;
+    QString keystoreImportECDSA(QString privateKeyHex, QString passphrase) override;
+    QString keystoreSignTx(QString address, QString txJSON, QString chainIDHex) override;
+    QString keystoreSignTxWithPassphrase(QString address, QString passphrase, QString txJSON, QString chainIDHex) override;
+    QString keystoreFind(QString address, QString url) override;
 
-    // --- Keystore operations ---
-    Q_INVOKABLE bool initKeystore(const QString& dir, int scryptN, int scryptP);
-    Q_INVOKABLE bool closeKeystore();
-    Q_INVOKABLE void refreshKeystoreAccounts();
-    Q_INVOKABLE QString keystoreNewAccount(const QString& passphrase);
-    Q_INVOKABLE QString keystoreImport(const QString& keyJSON, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString keystoreExport(const QString& address, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE bool keystoreDelete(const QString& address, const QString& passphrase);
-    Q_INVOKABLE bool keystoreHasAddress(const QString& address);
-    Q_INVOKABLE bool keystoreUnlock(const QString& address, const QString& passphrase);
-    Q_INVOKABLE bool keystoreLock(const QString& address);
-    Q_INVOKABLE bool keystoreTimedUnlock(const QString& address, const QString& passphrase, int timeout);
-    Q_INVOKABLE bool keystoreUpdate(const QString& address, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString keystoreSignHash(const QString& address, const QString& hashHex);
-    Q_INVOKABLE QString keystoreSignHashWithPassphrase(const QString& address, const QString& passphrase, const QString& hashHex);
-    Q_INVOKABLE QString keystoreImportECDSA(const QString& privateKeyHex, const QString& passphrase);
-    Q_INVOKABLE QString keystoreSignTx(const QString& address, const QString& txJSON, const QString& chainIDHex);
-    Q_INVOKABLE QString keystoreSignTxWithPassphrase(const QString& address, const QString& passphrase, const QString& txJSON, const QString& chainIDHex);
-    Q_INVOKABLE QString keystoreFind(const QString& address, const QString& url);
-
-    // --- Extended Keystore operations ---
-    Q_INVOKABLE bool initExtKeystore(const QString& dir, int scryptN, int scryptP);
-    Q_INVOKABLE bool closeExtKeystore();
-    Q_INVOKABLE void refreshExtKeystoreAccounts();
-    Q_INVOKABLE QString extKeystoreNewAccount(const QString& passphrase);
-    Q_INVOKABLE QString extKeystoreImport(const QString& keyJSON, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString extKeystoreExportExt(const QString& address, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString extKeystoreExportPriv(const QString& address, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE bool extKeystoreDelete(const QString& address, const QString& passphrase);
-    Q_INVOKABLE bool extKeystoreHasAddress(const QString& address);
-    Q_INVOKABLE bool extKeystoreUnlock(const QString& address, const QString& passphrase);
-    Q_INVOKABLE bool extKeystoreLock(const QString& address);
-    Q_INVOKABLE bool extKeystoreTimedUnlock(const QString& address, const QString& passphrase, int timeout);
-    Q_INVOKABLE bool extKeystoreUpdate(const QString& address, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString extKeystoreSignHash(const QString& address, const QString& hashHex);
-    Q_INVOKABLE QString extKeystoreSignHashWithPassphrase(const QString& address, const QString& passphrase, const QString& hashHex);
-    Q_INVOKABLE QString extKeystoreImportExtendedKey(const QString& extKey, const QString& passphrase);
-    Q_INVOKABLE QString extKeystoreSignTx(const QString& address, const QString& txJSON, const QString& chainIDHex);
-    Q_INVOKABLE QString extKeystoreSignTxWithPassphrase(const QString& address, const QString& passphrase, const QString& txJSON, const QString& chainIDHex);
-    Q_INVOKABLE QString extKeystoreDerive(const QString& address, const QString& path, int pin);
-    Q_INVOKABLE QString extKeystoreDeriveWithPassphrase(const QString& address, const QString& path, int pin, const QString& passphrase, const QString& newPassphrase);
-    Q_INVOKABLE QString extKeystoreFind(const QString& address, const QString& url);
-
-signals:
-    void statusChanged();
-    void keystoreAccountsChanged();
-    void extKeystoreAccountsChanged();
+    // Extended Keystore operations
+    bool initExtKeystore(QString dir, int scryptN, int scryptP) override;
+    bool closeExtKeystore() override;
+    void refreshExtKeystoreAccounts() override;
+    QString extKeystoreNewAccount(QString passphrase) override;
+    QString extKeystoreImport(QString keyJSON, QString passphrase, QString newPassphrase) override;
+    QString extKeystoreExportExt(QString address, QString passphrase, QString newPassphrase) override;
+    QString extKeystoreExportPriv(QString address, QString passphrase, QString newPassphrase) override;
+    bool extKeystoreDelete(QString address, QString passphrase) override;
+    bool extKeystoreHasAddress(QString address) override;
+    bool extKeystoreUnlock(QString address, QString passphrase) override;
+    bool extKeystoreLock(QString address) override;
+    bool extKeystoreTimedUnlock(QString address, QString passphrase, int timeout) override;
+    bool extKeystoreUpdate(QString address, QString passphrase, QString newPassphrase) override;
+    QString extKeystoreSignHash(QString address, QString hashHex) override;
+    QString extKeystoreSignHashWithPassphrase(QString address, QString passphrase, QString hashHex) override;
+    QString extKeystoreImportExtendedKey(QString extKey, QString passphrase) override;
+    QString extKeystoreSignTx(QString address, QString txJSON, QString chainIDHex) override;
+    QString extKeystoreSignTxWithPassphrase(QString address, QString passphrase, QString txJSON, QString chainIDHex) override;
+    QString extKeystoreDerive(QString address, QString path, int pin) override;
+    QString extKeystoreDeriveWithPassphrase(QString address, QString path, int pin, QString passphrase, QString newPassphrase) override;
+    QString extKeystoreFind(QString address, QString url) override;
 
 private:
-    void setStatus(const QString& message);
+    void updateStatus(const QString& message);
 
     LogosAPI* m_logosAPI;
     LogosModules* m_logos;
-    QString m_status;
-    QStringList m_keystoreAccounts;
-    QStringList m_extKeystoreAccounts;
 };
