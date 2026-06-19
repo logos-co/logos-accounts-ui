@@ -1,5 +1,6 @@
 {
   "name": "accounts_ui",
+  "display_name": "Accounts",
   "version": "1.0.0",
   "type": "ui_qml",
   "category": "accounts",
