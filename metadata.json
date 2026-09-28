@@ -8,14 +8,14 @@
   "description": "Create and manage Logos accounts and their keys.",
   "main": "accounts_ui_plugin",
   "icon": "src/icons/accounts_ui.png",
-  "view": "qml/AccountLogView.qml",
+  "view": "qml/AccountsView.qml",
 
   "dependencies": [],
 
   "codegen": {
-    "rep": "src/accountlog_ui.rep",
-    "backend_class": "AccountLogBackend",
-    "backend_header": "AccountLogBackend.h"
+    "rep": "src/AccountsBackend.rep",
+    "backend_class": "AccountsBackend",
+    "backend_header": "AccountsBackend.h"
   },
 
   "nix": {

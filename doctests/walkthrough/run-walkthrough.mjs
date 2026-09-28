@@ -45,7 +45,7 @@ class Inspector {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Evaluate a QML expression in AccountLogView's root scope, where the ids the
+// Evaluate a QML expression in AccountsView's root scope, where the ids the
 // view declares -- store, view, and each sheet -- are all visible.
 async function evalq(insp, expr) {
   const r = await insp.send("evaluate", { expression: expr });

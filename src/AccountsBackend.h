@@ -8,12 +8,12 @@
 #include <atomic>
 #include <functional>
 
-#include "rep_accountlog_ui_source.h"
+#include "rep_AccountsBackend_source.h"
 #include "logos_ui_plugin_context.h"
 
 struct LogosAccountCore;
 
-// The account log backend.
+// The Accounts backend.
 //
 // It decides nothing. Every account question -- what the vault holds, what the
 // log says, whether an edit is legal, what a publish writes -- is answered by
@@ -29,12 +29,12 @@ struct LogosAccountCore;
 // takes, and a slot that blocks here blocks the view behind it. So every call
 // runs on a one-thread pool and comes back through the event loop, and `busy`
 // is what the view guards its buttons with.
-class AccountLogBackend : public AccountLogSimpleSource,
-                          public LogosUiPluginContext
+class AccountsBackend : public AccountsBackendSimpleSource,
+                        public LogosUiPluginContext
 {
 public:
-    AccountLogBackend();
-    ~AccountLogBackend() override;
+    AccountsBackend();
+    ~AccountsBackend() override;
 
     void refresh() override;
     void selectAccount(QString address) override;
