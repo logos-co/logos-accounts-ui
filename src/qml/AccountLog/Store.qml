@@ -12,7 +12,7 @@ QtObject {
 
     // Every host call names the module it is about, so the name is spelled
     // once here rather than at each call site.
-    readonly property string moduleName: "accountlog_ui"
+    readonly property string moduleName: "accounts_ui"
 
     readonly property var backend:
         (typeof logos !== "undefined" && logos) ? logos.module(store.moduleName) : null

@@ -52,11 +52,11 @@ public:
     void publish() override;
     void dismissNotice() override;
 
-    /// Where this app keeps account keys. `LOGOS_ACCOUNTLOG_VAULT_DIR` if it is
-    /// set, otherwise `module_data/accountlog_ui/vault` under `LOGOS_USER_DIR`,
+    /// Where this app keeps account keys. `LOGOS_ACCOUNTS_VAULT_DIR` if it is
+    /// set, otherwise `module_data/accounts_ui/vault` under `LOGOS_USER_DIR`,
     /// or under ui-host's application data when the host exports no root.
     static QString vaultDirectory();
-    /// `LOGOS_ACCOUNTLOG_STORE_URL` if it is set, otherwise the library's own
+    /// `LOGOS_ACCOUNTS_STORE_URL` if it is set, otherwise the library's own
     /// default. The literal "memory" runs against an in-process store. Named
     /// apart from the `storeUrl` property, which the replica reads and which
     /// this is the source of.

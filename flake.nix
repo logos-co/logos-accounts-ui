@@ -90,13 +90,13 @@
       # key, name the account, endorse an installation, publish -- and hold the
       # finished window open. It captures the numbered screenshots in
       # doctests/images on the way through, and the doc-test launches it to
-      # capture one shot of the published log (see doctests/accountlog-ui.test.yaml).
+      # capture one shot of the published log (see doctests/accounts-ui.test.yaml).
       # APP_BIN is this flake's standalone runner; the driver scripts are
       # bundled from ./doctests/walkthrough.
       walkthroughRunner = system:
         let pkgs = import logos-module-builder.inputs.nixpkgs { inherit system; };
         in pkgs.writeShellApplication {
-          name = "accountlog-ui-walkthrough";
+          name = "accounts-ui-walkthrough";
           runtimeInputs = with pkgs; [ nodejs coreutils util-linux procps bash ];
           text = ''
             export APP_BIN="${base.apps.${system}.default.program}"
@@ -116,7 +116,7 @@
     in
     base // {
       apps = withWalkthrough base.apps
-        (system: { type = "app"; program = "${walkthroughRunner system}/bin/accountlog-ui-walkthrough"; });
+        (system: { type = "app"; program = "${walkthroughRunner system}/bin/accounts-ui-walkthrough"; });
       # Also a package so `nix build .#walkthrough` resolves: the doc-test runner
       # pre-builds its launch target that way to warm the store before the run.
       packages = withWalkthrough base.packages walkthroughRunner;

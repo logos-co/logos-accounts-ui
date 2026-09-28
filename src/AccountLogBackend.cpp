@@ -14,7 +14,7 @@
 namespace {
 
 // Quiet below warnings: every failure it logs is already on screen.
-Q_LOGGING_CATEGORY(lcBackend, "accountlog_ui", QtWarningMsg)
+Q_LOGGING_CATEGORY(lcBackend, "accounts_ui", QtWarningMsg)
 
 /// Parse a reply and release it. Every library call returns JSON with an `ok`
 /// field, so a null or unparseable reply is itself reported as a failed one
@@ -92,7 +92,7 @@ AccountLogBackend::~AccountLogBackend()
 
 QString AccountLogBackend::vaultDirectory()
 {
-    const QByteArray override = qgetenv("LOGOS_ACCOUNTLOG_VAULT_DIR");
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_VAULT_DIR");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
 
@@ -103,12 +103,12 @@ QString AccountLogBackend::vaultDirectory()
     QString root = qEnvironmentVariable("LOGOS_USER_DIR");
     if (root.isEmpty())
         root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    return QDir(root).filePath(QStringLiteral("module_data/accountlog_ui/vault"));
+    return QDir(root).filePath(QStringLiteral("module_data/accounts_ui/vault"));
 }
 
 QString AccountLogBackend::configuredStoreUrl()
 {
-    const QByteArray override = qgetenv("LOGOS_ACCOUNTLOG_STORE_URL");
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_STORE_URL");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
     return QString::fromUtf8(logos_account_core_default_store_url());

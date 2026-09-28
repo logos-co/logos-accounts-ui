@@ -20,7 +20,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE="${1:-$(mktemp -d "${TMPDIR:-/tmp}/accountlog-walkthrough-show.XXXXXX")}"
+BASE="${1:-$(mktemp -d "${TMPDIR:-/tmp}/accounts-ui-walkthrough-show.XXXXXX")}"
 DATA_DIR="$BASE/data"
 OUT_DIR="${OUT_DIR:-$BASE/images}"
 SHOW_PORT="${SHOW_PORT:-3768}"

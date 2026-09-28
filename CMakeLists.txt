@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(AccountLogUiPlugin LANGUAGES CXX)
+project(AccountsUiPlugin LANGUAGES CXX)
 
 if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
     include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
@@ -9,7 +9,7 @@ endif()
 
 # SOURCES must be listed explicitly -- the macro does not glob.
 logos_module(
-    NAME accountlog_ui
+    NAME accounts_ui
     REP_FILE src/accountlog_ui.rep
     SOURCES
         src/AccountLogBackend.h

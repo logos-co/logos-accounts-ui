@@ -1,13 +1,13 @@
 {
-  "name": "accountlog_ui",
-  "display_name": "Account Log",
+  "name": "accounts_ui",
+  "display_name": "Accounts",
   "version": "0.3.0",
   "type": "ui_qml",
   "interface": "universal",
   "category": "general",
   "description": "Create and manage Logos accounts and their keys.",
-  "main": "accountlog_ui_plugin",
-  "icon": "src/icons/accountlog_ui.png",
+  "main": "accounts_ui_plugin",
+  "icon": "src/icons/accounts_ui.png",
   "view": "qml/AccountLogView.qml",
 
   "dependencies": [],
