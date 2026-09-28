@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import Logos.Theme
 import Logos.Controls
 
-import AccountLog
+import AccountsUi
 
 // The account the bar names, one section per namespace replayed from its log,
 // and the log itself. One screen serves both kinds of account: an account this

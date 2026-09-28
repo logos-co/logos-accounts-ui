@@ -1,4 +1,4 @@
-#include "AccountLogBackend.h"
+#include "AccountsBackend.h"
 
 #include <QDir>
 #include <QJsonArray>
@@ -14,7 +14,7 @@
 namespace {
 
 // Quiet below warnings: every failure it logs is already on screen.
-Q_LOGGING_CATEGORY(lcBackend, "accountlog_ui", QtWarningMsg)
+Q_LOGGING_CATEGORY(lcBackend, "accounts_ui", QtWarningMsg)
 
 /// Parse a reply and release it. Every library call returns JSON with an `ok`
 /// field, so a null or unparseable reply is itself reported as a failed one
@@ -65,7 +65,7 @@ QString droppedText(int count)
 
 } // namespace
 
-AccountLogBackend::AccountLogBackend()
+AccountsBackend::AccountsBackend()
 {
     m_pool.setMaxThreadCount(1);
 
@@ -83,16 +83,16 @@ AccountLogBackend::AccountLogBackend()
     reloadAccounts();
 }
 
-AccountLogBackend::~AccountLogBackend()
+AccountsBackend::~AccountsBackend()
 {
     // The pool holds a raw handle, so it has to drain before the handle goes.
     m_pool.waitForDone();
     logos_account_core_free(m_core);
 }
 
-QString AccountLogBackend::vaultDirectory()
+QString AccountsBackend::vaultDirectory()
 {
-    const QByteArray override = qgetenv("LOGOS_ACCOUNTLOG_VAULT_DIR");
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_VAULT_DIR");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
 
@@ -103,18 +103,18 @@ QString AccountLogBackend::vaultDirectory()
     QString root = qEnvironmentVariable("LOGOS_USER_DIR");
     if (root.isEmpty())
         root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    return QDir(root).filePath(QStringLiteral("module_data/accountlog_ui/vault"));
+    return QDir(root).filePath(QStringLiteral("module_data/accounts_ui/vault"));
 }
 
-QString AccountLogBackend::configuredStoreUrl()
+QString AccountsBackend::configuredStoreUrl()
 {
-    const QByteArray override = qgetenv("LOGOS_ACCOUNTLOG_STORE_URL");
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_STORE_URL");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
     return QString::fromUtf8(logos_account_core_default_store_url());
 }
 
-void AccountLogBackend::onContextReady()
+void AccountsBackend::onContextReady()
 {
     // Nothing is asked of another module: this app depends on none. The hook is
     // still the first point at which calling out is safe, so the first read of
@@ -124,10 +124,10 @@ void AccountLogBackend::onContextReady()
         refresh();
 }
 
-void AccountLogBackend::call(const QString &what,
-                             std::function<char *(LogosAccountCore *)> work,
-                             std::function<void(const QJsonObject &)> landed,
-                             std::function<void(const QString &)> refused)
+void AccountsBackend::call(const QString &what,
+                           std::function<char *(LogosAccountCore *)> work,
+                           std::function<void(const QJsonObject &)> landed,
+                           std::function<void(const QString &)> refused)
 {
     if (!m_core) {
         report(what, QStringLiteral("the account core is not open"));
@@ -176,7 +176,7 @@ void AccountLogBackend::call(const QString &what,
     });
 }
 
-void AccountLogBackend::reloadAccounts()
+void AccountsBackend::reloadAccounts()
 {
     call(QStringLiteral("accounts"),
          [](LogosAccountCore *core) { return logos_account_core_accounts(core); },
@@ -212,7 +212,7 @@ void AccountLogBackend::reloadAccounts()
          });
 }
 
-void AccountLogBackend::reloadState()
+void AccountsBackend::reloadState()
 {
     const QByteArray address = utf8(selectedAddress());
     if (address.isEmpty()) {
@@ -240,7 +240,7 @@ void AccountLogBackend::reloadState()
          });
 }
 
-void AccountLogBackend::refresh()
+void AccountsBackend::refresh()
 {
     const QByteArray address = utf8(selectedAddress());
     if (address.isEmpty()) {
@@ -288,7 +288,7 @@ void AccountLogBackend::refresh()
          });
 }
 
-void AccountLogBackend::selectAccount(QString address)
+void AccountsBackend::selectAccount(QString address)
 {
     if (address == selectedAddress())
         return;
@@ -297,7 +297,7 @@ void AccountLogBackend::selectAccount(QString address)
     refresh();
 }
 
-void AccountLogBackend::setSelection(const QString &address)
+void AccountsBackend::setSelection(const QString &address)
 {
     ++m_selection;
     setSelectedAddress(address);
@@ -308,7 +308,7 @@ void AccountLogBackend::setSelection(const QString &address)
                   droppedText(dropped));
 }
 
-void AccountLogBackend::createAccount(QString password)
+void AccountsBackend::createAccount(QString password)
 {
     const QByteArray secret = utf8(password);
     call(QStringLiteral("createAccount"),
@@ -323,7 +323,7 @@ void AccountLogBackend::createAccount(QString password)
          });
 }
 
-void AccountLogBackend::importAccount(QString secretHex, QString password)
+void AccountsBackend::importAccount(QString secretHex, QString password)
 {
     const QByteArray secret = utf8(secretHex);
     const QByteArray pass = utf8(password);
@@ -343,7 +343,7 @@ void AccountLogBackend::importAccount(QString secretHex, QString password)
          });
 }
 
-void AccountLogBackend::exportAccount(QString address, QString password)
+void AccountsBackend::exportAccount(QString address, QString password)
 {
     const QByteArray target = utf8(address);
     const QByteArray pass = utf8(password);
@@ -358,7 +358,7 @@ void AccountLogBackend::exportAccount(QString address, QString password)
          });
 }
 
-void AccountLogBackend::unlock(QString address, QString password)
+void AccountsBackend::unlock(QString address, QString password)
 {
     const QByteArray target = utf8(address);
     const QByteArray pass = utf8(password);
@@ -369,7 +369,7 @@ void AccountLogBackend::unlock(QString address, QString password)
          [this](const QJsonObject &) { reloadAccounts(); });
 }
 
-void AccountLogBackend::forgetAccount(QString address)
+void AccountsBackend::forgetAccount(QString address)
 {
     const QByteArray target = utf8(address);
     call(QStringLiteral("forgetAccount"),
@@ -384,7 +384,7 @@ void AccountLogBackend::forgetAccount(QString address)
          });
 }
 
-void AccountLogBackend::observeAccount(QString address)
+void AccountsBackend::observeAccount(QString address)
 {
     // The core takes an address in one spelling only, so what it was asked
     // about is what goes on screen: a selection in any other spelling would
@@ -407,7 +407,7 @@ void AccountLogBackend::observeAccount(QString address)
          });
 }
 
-void AccountLogBackend::stopObserving(QString address)
+void AccountsBackend::stopObserving(QString address)
 {
     const QByteArray target = utf8(address);
     call(QStringLiteral("stopObserving"),
@@ -422,7 +422,7 @@ void AccountLogBackend::stopObserving(QString address)
          });
 }
 
-void AccountLogBackend::stageAddInstallation(QString keyHex)
+void AccountsBackend::stageAddInstallation(QString keyHex)
 {
     const QByteArray address = utf8(selectedAddress());
     const QByteArray key = utf8(keyHex.trimmed());
@@ -434,7 +434,7 @@ void AccountLogBackend::stageAddInstallation(QString keyHex)
          [this](const QJsonObject &) { edited(); });
 }
 
-void AccountLogBackend::stageSetDisplayName(QString name)
+void AccountsBackend::stageSetDisplayName(QString name)
 {
     const QByteArray address = utf8(selectedAddress());
     const QByteArray value = utf8(name);
@@ -446,7 +446,7 @@ void AccountLogBackend::stageSetDisplayName(QString name)
          [this](const QJsonObject &) { edited(); });
 }
 
-void AccountLogBackend::stageRevoke(int index)
+void AccountsBackend::stageRevoke(int index)
 {
     if (index < 0) {
         report(QStringLiteral("stageRevoke"), QStringLiteral("there is no entry before the first"));
@@ -461,7 +461,7 @@ void AccountLogBackend::stageRevoke(int index)
          [this](const QJsonObject &) { edited(); });
 }
 
-void AccountLogBackend::discardPending()
+void AccountsBackend::discardPending()
 {
     const QByteArray address = utf8(selectedAddress());
     call(QStringLiteral("discardPending"),
@@ -471,7 +471,7 @@ void AccountLogBackend::discardPending()
          [this](const QJsonObject &) { edited(); });
 }
 
-void AccountLogBackend::publish()
+void AccountsBackend::publish()
 {
     const QString address = selectedAddress();
     const QByteArray target = utf8(address);
@@ -520,26 +520,26 @@ void AccountLogBackend::publish()
          });
 }
 
-void AccountLogBackend::edited()
+void AccountsBackend::edited()
 {
     // A notice described the log before this edit.
     dismissNotice();
     reloadAccounts();
 }
 
-void AccountLogBackend::dismissNotice()
+void AccountsBackend::dismissNotice()
 {
     setNotice(QString(), QString(), QString());
 }
 
-void AccountLogBackend::setNotice(const QString &kind, const QString &title, const QString &body)
+void AccountsBackend::setNotice(const QString &kind, const QString &title, const QString &body)
 {
     setNoticeKind(kind);
     setNoticeTitle(title);
     setNoticeBody(body);
 }
 
-void AccountLogBackend::report(const QString &what, const QString &message)
+void AccountsBackend::report(const QString &what, const QString &message)
 {
     // A sheet or a screen shows its own call's failure. The calls made from
     // a button on the log or the account bar have nowhere else to say it.

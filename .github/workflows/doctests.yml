@@ -84,11 +84,11 @@ jobs:
           # --continue-on-fail so the run walks every step and the published
           # report is complete; the job still fails if any step did.
           nix run github:logos-co/logos-doctest -- run \
-            doctests/accountlog-ui.test.yaml \
+            doctests/accounts-ui.test.yaml \
             --verbose \
             --continue-on-fail \
             --release-for logos-accounts-ui=${{ steps.commit.outputs.sha }} \
-            --report "${{ runner.temp }}/accountlog-ui-doctest-report.html"
+            --report "${{ runner.temp }}/accounts-ui-doctest-report.html"
 
       - name: Stage report for upload
         if: always()
@@ -96,8 +96,8 @@ jobs:
         run: |
           mkdir -p report-out
           # Named index.html so the published directory URL renders directly.
-          if [ -f "${{ runner.temp }}/accountlog-ui-doctest-report.html" ]; then
-            cp "${{ runner.temp }}/accountlog-ui-doctest-report.html" report-out/index.html
+          if [ -f "${{ runner.temp }}/accounts-ui-doctest-report.html" ]; then
+            cp "${{ runner.temp }}/accounts-ui-doctest-report.html" report-out/index.html
           else
             echo "<h1>No report produced</h1>" > report-out/index.html
           fi
@@ -106,17 +106,17 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: accountlog-ui-doctest-report-${{ matrix.os }}
+          name: accounts-ui-doctest-report-${{ matrix.os }}
           path: report-out/index.html
           if-no-files-found: warn
 
       - name: Verify markdown generation
         run: |
           nix run github:logos-co/logos-doctest -- generate \
-            doctests/accountlog-ui.test.yaml \
+            doctests/accounts-ui.test.yaml \
             --release-for logos-accounts-ui=${{ steps.commit.outputs.sha }} \
-            -o /tmp/accountlog-ui.md
-          test -s /tmp/accountlog-ui.md
+            -o /tmp/accounts-ui.md
+          test -s /tmp/accounts-ui.md
 
   # The walkthrough, run for its pictures rather than for its verdict on the
   # tutorial. It drives the same app the doc-test drives, checks the app's own
@@ -157,7 +157,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: accountlog-ui-walkthrough-screenshots
+          name: accounts-ui-walkthrough-screenshots
           path: doctests/images/*.png
           if-no-files-found: error
 
@@ -199,10 +199,10 @@ jobs:
           mkdir -p "site/$BASE"
           # The bare download above takes every artifact of this run, so the
           # walkthrough job's captures are already here.
-          shots="artifacts/accountlog-ui-walkthrough-screenshots"
+          shots="artifacts/accounts-ui-walkthrough-screenshots"
           found=""
           for os in ubuntu-latest; do
-            src="artifacts/accountlog-ui-doctest-report-$os/index.html"
+            src="artifacts/accounts-ui-doctest-report-$os/index.html"
             if [ -f "$src" ]; then
               mkdir -p "site/$BASE/$os"
               cp "$src" "site/$BASE/$os/index.html"
@@ -279,7 +279,7 @@ jobs:
             const root = `https://${owner}.github.io/${repo}`;
             const oses = "${{ steps.arrange.outputs.found }}".trim().split(/\s+/).filter(Boolean);
             const links = oses.map(os => `- [\`${os}\` report](${root}/${base}/${os}/)`).join("\n");
-            const marker = "<!-- accountlog-ui-doctest-report-links -->";
+            const marker = "<!-- accounts-ui-doctest-report-links -->";
             const body =
               `${marker}\n` +
               `### 📊 Doc-test report\n\n` +

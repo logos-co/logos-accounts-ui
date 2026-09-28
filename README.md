@@ -1,16 +1,16 @@
-# Account Log
+# Accounts
 
 A [Logos Basecamp](https://github.com/logos-co/logos-basecamp) app that holds an
 account's key and writes its [AccountLog](https://lip.logos.co/identity/raw/accountlog.html):
 the signed, append-only log an account is. It also reads accounts whose key is
 held elsewhere.
 
-![Account Log in Logos Basecamp 0.3.0](docs/screenshot.png)
+![Accounts in Logos Basecamp 0.3.0](docs/screenshot.png)
 
 ## Install
 
 In Logos Basecamp 0.3.0 or later, open **Applications** and install
-**Account Log**.
+**Accounts**.
 
 ## What it does
 
@@ -22,7 +22,7 @@ In Logos Basecamp 0.3.0 or later, open **Applications** and install
 - Seals a key with a password, per account, and exports or forgets it.
 
 Keys stay in the app's vault, one file per account, in
-`module_data/accountlog_ui/vault`: under the `--user-dir` basecamp was started
+`module_data/accounts_ui/vault`: under the `--user-dir` basecamp was started
 with, or else under `~/.local/share/Logos/ui-host` on Linux.
 
 ## Where logs are published
@@ -48,8 +48,8 @@ nix run     # the app in logos-standalone-app
 
 `rust-core/` makes every account decision (vault, staging, store client) behind
 the C ABI in `include/account_core.h`; `src/` is the Qt backend and the QML
-view. `LOGOS_ACCOUNTLOG_STORE_URL` points the app at another store, and
-`memory` selects an in-process one; `LOGOS_ACCOUNTLOG_VAULT_DIR` moves the
+view. `LOGOS_ACCOUNTS_STORE_URL` points the app at another store, and
+`memory` selects an in-process one; `LOGOS_ACCOUNTS_VAULT_DIR` moves the
 vault.
 
 The [tutorial](https://logos-co.github.io/logos-accounts-ui/) is executable:

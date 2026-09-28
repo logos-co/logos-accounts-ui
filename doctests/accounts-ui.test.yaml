@@ -1,5 +1,5 @@
 name: "Writing an account log: a key, a name, an installation, one update"
-output: accountlog-ui.md
+output: accounts-ui.md
 project_name: logos-accounts-ui
 release: ""
 
@@ -9,7 +9,7 @@ intro: |
   key derives. Nothing in it is ever deleted: revoking a key is itself an
   entry, pointing at the one it revokes.
 
-  `accountlog_ui` is the app that writes such a log. This doc-test builds it,
+  `accounts_ui` is the app that writes such a log. This doc-test builds it,
   launches it headless through
   [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp), and drives it the
   way a person would: make a key, give the account a name, endorse an
@@ -57,7 +57,7 @@ sections:
       # run: is never evaluated, and the build step would be proving only that
       # nix exited 0.
       - title: "The plugin really landed"
-        check_file: "result/lib/*accountlog_ui*plugin.{ext}"
+        check_file: "result/lib/*accounts_ui*plugin.{ext}"
 
       - title: "What a Logos plugin is, on disk"
         run: "ls result/lib"
@@ -87,9 +87,9 @@ sections:
       when the app itself says so, and the picture is taken then, so each one
       below is a state the app really reached.
 
-      Two things make that run hermetic. `LOGOS_ACCOUNTLOG_VAULT_DIR` puts the
+      Two things make that run hermetic. `LOGOS_ACCOUNTS_VAULT_DIR` puts the
       key files in the run's own directory, so the walkthrough always starts
-      from an empty vault. `LOGOS_ACCOUNTLOG_STORE_URL=memory` selects the
+      from an empty vault. `LOGOS_ACCOUNTS_STORE_URL=memory` selects the
       in-process store instead of chat-store on devnet, so the run needs no
       network and leaves no log behind, and the in-process store enforces the
       same rule chat-store's `/v1/account` does, that a log is accepted only

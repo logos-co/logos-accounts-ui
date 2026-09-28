@@ -1,4 +1,4 @@
-module AccountLog
+module AccountsUi
 
 singleton Fmt 1.0 Fmt.qml
 

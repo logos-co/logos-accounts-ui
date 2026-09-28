@@ -27,7 +27,7 @@ repo_root="$(cd "$here/../.." && pwd)"
 OUT_DIR="${OUT_DIR:-${1:-$repo_root/doctests/images}}"
 FLAKE="${FLAKE:-$repo_root}"
 APP_PORT="${APP_PORT:-3768}"
-WORK_DIR="${WORK_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/accountlog-walkthrough.XXXXXX")}"
+WORK_DIR="${WORK_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/accounts-ui-walkthrough.XXXXXX")}"
 mkdir -p "$OUT_DIR" "$WORK_DIR"
 
 if [ -z "${APP_BIN:-}" ]; then
@@ -93,11 +93,11 @@ wait_for_port() {
 mkdir -p "$WORK_DIR/vault"
 QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
   QML_INSPECTOR_PORT="$APP_PORT" \
-  LOGOS_ACCOUNTLOG_VAULT_DIR="$WORK_DIR/vault" \
-  LOGOS_ACCOUNTLOG_STORE_URL=memory \
+  LOGOS_ACCOUNTS_VAULT_DIR="$WORK_DIR/vault" \
+  LOGOS_ACCOUNTS_STORE_URL=memory \
   setsid "$APP_BIN" -platform offscreen --user-dir "$WORK_DIR/host" \
     > "$WORK_DIR/app.log" 2>&1 &
-echo "launched accountlog-ui (inspector $APP_PORT)"
+echo "launched accounts-ui (inspector $APP_PORT)"
 wait_for_port "$APP_PORT"
 
 OUT_DIR="$OUT_DIR" APP_PORT="$APP_PORT" node "$here/run-walkthrough.mjs"

@@ -1,4 +1,4 @@
-// The QtRO view contract for the account log app.
+// The QtRO view contract for the Accounts app.
 //
 // Two rules shape everything below.
 //
@@ -21,7 +21,7 @@
 // library the backend calls makes no IPC call, so none of it reaches the
 // module bus.
 
-class AccountLog
+class AccountsBackend
 {
     // Where publishing goes, for the store strip to name.
     PROP(QString storeUrl="" READONLY)
