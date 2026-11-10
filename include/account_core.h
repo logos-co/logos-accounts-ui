@@ -53,6 +53,12 @@ const char *logos_account_core_default_registry_program(void);
 LogosAccountCore *logos_account_core_new(const char *vault_dir, const char *sequencer_url,
                                          const char *program);
 
+// Like logos_account_core_new, but publishing to chat-store's /v1/account at
+// `store_url` instead of the registry, with no wallet involved. "memory"
+// selects the in-process store.
+LogosAccountCore *logos_account_core_new_with_chat_store(const char *vault_dir,
+                                                         const char *store_url);
+
 // Sends one registry write. Called from the thread a publish runs on, with
 //
 //   {"program":hex,"account":hex,"instruction":hex,"gasLimit":n}

@@ -57,7 +57,8 @@ public:
     /// or under ui-host's application data when the host exports no root.
     static QString vaultDirectory();
     /// `LOGOS_ACCOUNTS_SEQUENCER_URL` if it is set, otherwise the library's
-    /// default LEZ sequencer. The literal "memory" runs against an in-process
+    /// default LEZ sequencer. Not used when `LOGOS_ACCOUNTS_STORE_URL` names a
+    /// chat-store to publish to instead. The literal "memory" runs against an in-process
     /// store.
     static QString configuredSequencerUrl();
     /// `LOGOS_ACCOUNTS_REGISTRY_PROGRAM` if it is set, otherwise the library's

@@ -75,12 +75,19 @@ AccountsBackend::AccountsBackend()
     m_pool.setMaxThreadCount(1);
 
     const QString vault = vaultDirectory();
-    const QString sequencer = configuredSequencerUrl();
-    const QString program = configuredRegistryProgram();
-    m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
-                                    utf8(program).constData());
-    setStoreUrl(sequencer);
-    logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
+    const QString chatStore = qEnvironmentVariable("LOGOS_ACCOUNTS_STORE_URL");
+    if (!chatStore.isEmpty()) {
+        m_core = logos_account_core_new_with_chat_store(utf8(vault).constData(),
+                                                        utf8(chatStore).constData());
+        setStoreUrl(chatStore);
+    } else {
+        const QString sequencer = configuredSequencerUrl();
+        const QString program = configuredRegistryProgram();
+        m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
+                                        utf8(program).constData());
+        setStoreUrl(sequencer);
+        logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
+    }
 
     if (!m_core) {
         setStatusText(QStringLiteral("Could not read the vault"));

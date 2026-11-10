@@ -74,6 +74,22 @@ pub extern "C" fn logos_account_core_new(
     Box::into_raw(Box::new(LogosAccountCore(Mutex::new(core))))
 }
 
+/// Open the vault at `vault_dir` and point the app at chat-store's
+/// `/v1/account` at `store_url` instead of the registry. The literal `memory`
+/// selects this process's own store. Returns null only if an argument is not
+/// valid UTF-8.
+#[no_mangle]
+pub extern "C" fn logos_account_core_new_with_chat_store(
+    vault_dir: *const c_char,
+    store_url: *const c_char,
+) -> *mut LogosAccountCore {
+    let (Some(vault_dir), Some(store_url)) = (str_arg(vault_dir), str_arg(store_url)) else {
+        return std::ptr::null_mut();
+    };
+    let core = AccountCore::new(vault_dir, Store::chat(store_url));
+    Box::into_raw(Box::new(LogosAccountCore(Mutex::new(core))))
+}
+
 /// Sends one prepared registry write; see `include/account_core.h`.
 pub type SubmitFn =
     unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;

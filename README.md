@@ -40,7 +40,9 @@ names another. The registry accepts a log only where it extends the one it
 holds, and caps a log at 32 KiB. A published log is permanent.
 
 The registry program is not deployed yet: set `LOGOS_ACCOUNTS_REGISTRY_PROGRAM`
-to its base58 account id.
+to its base58 account id. Until then, `LOGOS_ACCOUNTS_STORE_URL` publishes to
+chat-store's `/v1/account` instead, e.g. `https://devnet.chat-kc.logos.co`, with
+no wallet involved.
 
 ## Develop
 
