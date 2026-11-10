@@ -94,7 +94,7 @@ mkdir -p "$WORK_DIR/vault"
 QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
   QML_INSPECTOR_PORT="$APP_PORT" \
   LOGOS_ACCOUNTS_VAULT_DIR="$WORK_DIR/vault" \
-  LOGOS_ACCOUNTS_STORE_URL=memory \
+  LOGOS_ACCOUNTS_SEQUENCER_URL=memory \
   setsid "$APP_BIN" -platform offscreen --user-dir "$WORK_DIR/host" \
     > "$WORK_DIR/app.log" 2>&1 &
 echo "launched accounts-ui (inspector $APP_PORT)"

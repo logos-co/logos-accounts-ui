@@ -27,17 +27,20 @@ with, or else under `~/.local/share/Logos/ui-host` on Linux.
 
 ## Where logs are published
 
-The AccountLog spec leaves distribution open, and there is no delivery topic
-for account logs yet. So for now the app publishes over HTTP to chat-store's
-`/v1/account` route on devnet (`https://devnet.chat-kc.logos.co`), which
-accepts a log only where it extends the one it holds, and serves every log by
-address. A published log is permanent.
+Logs live in the account registry on the Logos Execution Zone
+([account-registry-lez](https://github.com/logos-messaging/account-registry-lez)),
+one per address, readable by anyone who holds it. The app reads them from the
+LEZ sequencer (`https://testnet.lez.logos.co` by default) and verifies each one
+before showing it.
 
-The plan is for account logs to be broadcast over λDelivery and kept in an
-Execution Zone
-([logos-chat#268](https://github.com/logos-messaging/logos-chat/issues/268)).
-The app reaches its store only through the account crate's provider traits
-(`rust-core/src/store.rs`), which is where that switch lands.
+A publish is an `Append` transaction, and LEZ charges a fee for it, so the app
+sends it through the **LEZ Wallet** module, which must be open. The first
+public wallet account that can cover the fee pays; `LOGOS_ACCOUNTS_LEZ_PAYER`
+names another. The registry accepts a log only where it extends the one it
+holds, and caps a log at 32 KiB. A published log is permanent.
+
+The registry program is not deployed yet: set `LOGOS_ACCOUNTS_REGISTRY_PROGRAM`
+to its base58 account id.
 
 ## Develop
 
@@ -48,8 +51,8 @@ nix run     # the app in logos-standalone-app
 
 `rust-core/` makes every account decision (vault, staging, store client) behind
 the C ABI in `include/account_core.h`; `src/` is the Qt backend and the QML
-view. `LOGOS_ACCOUNTS_STORE_URL` points the app at another store, and
-`memory` selects an in-process one; `LOGOS_ACCOUNTS_VAULT_DIR` moves the
+view. `LOGOS_ACCOUNTS_SEQUENCER_URL` points the app at another LEZ sequencer,
+and `memory` selects an in-process store; `LOGOS_ACCOUNTS_VAULT_DIR` moves the
 vault.
 
 The [tutorial](https://logos-co.github.io/logos-accounts-ui/) is executable:

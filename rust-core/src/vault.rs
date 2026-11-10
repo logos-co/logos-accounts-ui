@@ -170,7 +170,7 @@ impl Vault {
                 let bytes: &[u8; 32] = secret.as_slice().try_into().map_err(|_| {
                     VaultError::Corrupt(format!("the sealed key is {} bytes, not 32", secret.len()))
                 })?;
-                Ed25519SigningKey::from_bytes(bytes)
+                Ed25519SigningKey::from_seed(bytes)
             }
             (false, None) => read_open(&path)?,
             (true, None) => return Err(VaultError::PasswordRequired),
@@ -253,7 +253,7 @@ struct OpenDocument<'a> {
 }
 
 fn write_open_document(addr: &AccountAddr, key: &Ed25519SigningKey) -> Zeroizing<Vec<u8>> {
-    let secret = Zeroizing::new(*key.as_bytes());
+    let secret = key.seed();
     let mut hex_key = Zeroizing::new([0u8; 64]);
     hex::encode_to_slice(secret.as_slice(), hex_key.as_mut_slice())
         .expect("32 bytes are 64 hex characters");
@@ -299,7 +299,7 @@ fn read_open(path: &Path) -> Result<Ed25519SigningKey, VaultError> {
             hex_key.len()
         )),
     })?;
-    Ok(Ed25519SigningKey::from_bytes(&secret))
+    Ok(Ed25519SigningKey::from_seed(&secret))
 }
 
 /// A private directory the vault file is written into and renamed out of:
@@ -317,7 +317,7 @@ impl Stage {
     }
 
     fn seal(&self, key: &Ed25519SigningKey, password: &str) -> Result<(), VaultError> {
-        let secret = Zeroizing::new(*key.as_bytes());
+        let secret = key.seed();
         eth_keystore::encrypt_key(
             &self.0,
             &mut rand::thread_rng(),
@@ -468,7 +468,7 @@ mod tests {
             }]
         );
         let opened = vault.open(&addr, Some("correct horse")).unwrap();
-        assert_eq!(opened.as_bytes(), key.as_bytes());
+        assert_eq!(opened.seed(), key.seed());
     }
 
     #[test]
@@ -509,7 +509,7 @@ mod tests {
                 protected: false
             }]
         );
-        assert_eq!(vault.open(&addr, None).unwrap().as_bytes(), key.as_bytes());
+        assert_eq!(vault.open(&addr, None).unwrap().seed(), key.seed());
     }
 
     /// The point of the second spelling: the file says what it is holding, so
@@ -522,7 +522,7 @@ mod tests {
 
         let text = fs::read_to_string(vault.path_of(&addr, false)).unwrap();
 
-        assert!(text.contains(&hex::encode(key.as_bytes())));
+        assert!(text.contains(&hex::encode(key.seed())));
         assert!(text.contains(OPEN_WARNING));
     }
 
@@ -559,12 +559,12 @@ mod tests {
         expected.sort_by_key(AccountAddr::to_string);
         assert_eq!(addresses(&vault), expected);
         assert_eq!(
-            vault.open(&addr_of(&first), Some("pw")).unwrap().as_bytes(),
-            first.as_bytes()
+            vault.open(&addr_of(&first), Some("pw")).unwrap().seed(),
+            first.seed()
         );
         assert_eq!(
-            vault.open(&addr_of(&second), None).unwrap().as_bytes(),
-            second.as_bytes()
+            vault.open(&addr_of(&second), None).unwrap().seed(),
+            second.seed()
         );
     }
 
@@ -577,10 +577,7 @@ mod tests {
         let refused = vault.create(&key, Some("another"));
 
         assert!(matches!(refused, Err(VaultError::AccountExists(_))));
-        assert_eq!(
-            vault.open(&addr, Some("pw")).unwrap().as_bytes(),
-            key.as_bytes()
-        );
+        assert_eq!(vault.open(&addr, Some("pw")).unwrap().seed(), key.seed());
     }
 
     #[test]

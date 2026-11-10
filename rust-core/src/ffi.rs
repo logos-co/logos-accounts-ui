@@ -19,49 +19,110 @@
 // safety contract is the file header, and it is the same for all of them.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use serde_json::{json, Value};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::json;
 use crate::manager::{parse_address, AccountCore, CoreError};
-use crate::store::{Store, DEFAULT_STORE_URL};
+use crate::store::{Store, DEFAULT_REGISTRY_PROGRAM, DEFAULT_SEQUENCER_URL};
 use crate::vault::VaultError;
 
 /// The opaque handle C holds.
 pub struct LogosAccountCore(Mutex<AccountCore>);
 
-/// One NUL-terminated copy of [`DEFAULT_STORE_URL`], so the pointer handed to C
-/// outlives the call and the URL itself has one definition.
-static DEFAULT_STORE_URL_C: LazyLock<CString> =
-    LazyLock::new(|| CString::new(DEFAULT_STORE_URL).expect("the default store url has no NUL"));
+/// NUL-terminated copies of the defaults, so the pointers handed to C outlive
+/// the call and each value has one definition.
+static DEFAULT_SEQUENCER_URL_C: LazyLock<CString> =
+    LazyLock::new(|| CString::new(DEFAULT_SEQUENCER_URL).expect("no NUL"));
+static DEFAULT_REGISTRY_PROGRAM_C: LazyLock<CString> =
+    LazyLock::new(|| CString::new(DEFAULT_REGISTRY_PROGRAM).expect("no NUL"));
 
-/// The store this app points at when nothing else says otherwise. Static, so
-/// the caller must not free it.
+/// The LEZ sequencer this app reads from when nothing else says otherwise.
+/// Static, so the caller must not free it.
 #[no_mangle]
-pub extern "C" fn logos_account_core_default_store_url() -> *const c_char {
-    DEFAULT_STORE_URL_C.as_ptr()
+pub extern "C" fn logos_account_core_default_sequencer_url() -> *const c_char {
+    DEFAULT_SEQUENCER_URL_C.as_ptr()
 }
 
-/// Open the vault at `vault_dir` and point the app at `store_url`. The literal
-/// `memory` selects this process's own store, which is what a harness with no
-/// network gets. Returns null only if an argument is not valid UTF-8.
+/// The registry program on the default sequencer, empty while none is
+/// deployed. Static, so the caller must not free it.
+#[no_mangle]
+pub extern "C" fn logos_account_core_default_registry_program() -> *const c_char {
+    DEFAULT_REGISTRY_PROGRAM_C.as_ptr()
+}
+
+/// Open the vault at `vault_dir` and point the app at the account registry
+/// deployed at `program` on `sequencer_url`. The literal `memory` as the
+/// sequencer selects this process's own store, which is what a harness with
+/// no network gets. Returns null only if an argument is not valid UTF-8.
 #[no_mangle]
 pub extern "C" fn logos_account_core_new(
     vault_dir: *const c_char,
-    store_url: *const c_char,
+    sequencer_url: *const c_char,
+    program: *const c_char,
 ) -> *mut LogosAccountCore {
-    let Some(vault_dir) = str_arg(vault_dir) else {
+    let (Some(vault_dir), Some(sequencer_url), Some(program)) =
+        (str_arg(vault_dir), str_arg(sequencer_url), str_arg(program))
+    else {
         return std::ptr::null_mut();
     };
-    let Some(store_url) = str_arg(store_url) else {
-        return std::ptr::null_mut();
-    };
-    let core = AccountCore::new(vault_dir, Store::from_url(store_url));
+    let core = AccountCore::new(vault_dir, Store::open(sequencer_url, program));
     Box::into_raw(Box::new(LogosAccountCore(Mutex::new(core))))
+}
+
+/// Sends one prepared registry write; see `include/account_core.h`.
+pub type SubmitFn =
+    unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;
+
+/// The caller's context pointer, which the caller keeps valid and safe to use
+/// from the thread a publish runs on.
+struct SubmitContext(*mut c_void);
+unsafe impl Send for SubmitContext {}
+unsafe impl Sync for SubmitContext {}
+
+impl SubmitContext {
+    fn get(&self) -> *mut c_void {
+        self.0
+    }
+}
+
+/// Route every publish through `submit`, called with `context` from the
+/// thread the publish runs on. Safe on null.
+#[no_mangle]
+pub extern "C" fn logos_account_core_set_submitter(
+    core: *mut LogosAccountCore,
+    submit: Option<SubmitFn>,
+    context: *mut c_void,
+) {
+    let (Some(core), Some(submit)) = (unsafe { core.as_ref() }, submit) else {
+        return;
+    };
+    let context = SubmitContext(context);
+    let call = move |request: &str| -> Result<(), String> {
+        let request = CString::new(request).map_err(|e| e.to_string())?;
+        let reply = unsafe { submit(context.get(), request.as_ptr()) };
+        if reply.is_null() {
+            return Err("the wallet gave no answer".into());
+        }
+        let reply = unsafe { CStr::from_ptr(reply) }
+            .to_string_lossy()
+            .into_owned();
+        let reply: Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+        if reply["ok"].as_bool() == Some(true) {
+            Ok(())
+        } else {
+            Err(reply["error"].as_str().unwrap_or("refused").to_owned())
+        }
+    };
+    let guard = core
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard.store().set_submitter(Arc::new(call));
 }
 
 /// Safe on null.
@@ -402,7 +463,11 @@ mod tests {
     }
 
     fn core(dir: &std::path::Path) -> *mut LogosAccountCore {
-        logos_account_core_new(c(dir.to_str().unwrap()).as_ptr(), c("memory").as_ptr())
+        logos_account_core_new(
+            c(dir.to_str().unwrap()).as_ptr(),
+            c("memory").as_ptr(),
+            c("").as_ptr(),
+        )
     }
 
     /// The three properties at the top of this file, on the path that is

@@ -15,8 +15,9 @@ use account::{Account, AccountError, AccountProvider, AccountPublisher, AccountR
 use account_log::{
     AccountAddr, AccountEntry, AccountLog, AccountLogDraft, AccountLogError, AccountRecord,
     Context, Ed25519SigningKey, Ed25519VerifyingKey, EntryData, SignedAccountLog,
-    ACCOUNT_LOG_DOMAIN, MAX_PAYLOAD_BYTES, SIGNER_CONTEXT,
+    ACCOUNT_LOG_DOMAIN,
 };
+use account_registry_client::MAX_LOG_PAYLOAD_BYTES as MAX_PAYLOAD_BYTES;
 use serde::Serialize;
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -24,6 +25,10 @@ use zeroize::Zeroizing;
 use crate::observed::{ObservedAccounts, ObservedError};
 use crate::store::{Store, StoreError};
 use crate::vault::{Vault, VaultError};
+
+/// An installation key logos-chat signs with, under the chat namespace.
+pub static SIGNER_CONTEXT: LazyLock<Context> =
+    LazyLock::new(|| Context::new("chat.signer").expect("valid context"));
 
 /// The display name, under the profile specification's namespace.
 pub static DISPLAY_NAME_CONTEXT: LazyLock<Context> =
@@ -395,7 +400,7 @@ impl AccountCore {
                 secret_hex.len()
             )),
         })?;
-        let key = Box::new(Ed25519SigningKey::from_bytes(&secret));
+        let key = Box::new(Ed25519SigningKey::from_seed(&secret));
         let addr = self.vault.create(&key, password)?;
         if password.is_some() {
             self.unlocked.insert(addr.clone(), key);
@@ -415,9 +420,7 @@ impl AccountCore {
     ) -> Result<Zeroizing<String>, CoreError> {
         self.require_managed(addr)?;
         let key = self.vault.open(addr, password)?;
-        Ok(Zeroizing::new(hex::encode(
-            Zeroizing::new(*key.as_bytes()).as_slice(),
-        )))
+        Ok(Zeroizing::new(hex::encode(key.seed().as_slice())))
     }
 
     /// Open the sealed key of `addr` and hold it until the core is dropped, so
@@ -782,10 +785,13 @@ impl AccountCore {
         for entry in Self::plan(staged) {
             draft.push(entry)?;
         }
-        draft.log().encode().map_err(|e| match e {
+        let encoded = draft.log().encode().map_err(|e| match e {
             AccountLogError::TooLarge(_) => CoreError::OverBudget,
             other => other.into(),
         })?;
+        if encoded.as_bytes().len() > MAX_PAYLOAD_BYTES {
+            return Err(CoreError::OverBudget);
+        }
         Ok(())
     }
 
@@ -1278,7 +1284,7 @@ mod tests {
     /// the phone's, and every earlier name stays live behind the newest.
     #[test]
     fn a_rename_appends_and_leaves_the_earlier_names_live() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let (phone_vault, laptop_vault) =
             (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let mut phone = AccountCore::new(phone_vault.path(), store.clone());
@@ -1333,7 +1339,7 @@ mod tests {
     #[test]
     fn an_earlier_name_can_be_taken_again() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = core.create_account(None).unwrap();
         for name in ["Saro", "Raya", "Saro"] {
             core.stage_set_display_name(&addr, name).unwrap();
@@ -1358,7 +1364,7 @@ mod tests {
     /// another log.
     #[test]
     fn an_update_the_store_has_moved_past_is_refused() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let name = |value: &str| {
@@ -1366,7 +1372,7 @@ mod tests {
         };
 
         let mut phone =
-            Account::from_signing_key(Ed25519SigningKey::from_bytes(key.as_bytes()), store.clone());
+            Account::from_signing_key(Ed25519SigningKey::from_seed(&key.seed()), store.clone());
         let held = phone.update().push(name("Saro R")).publish().unwrap();
 
         let planned_on_nothing = Extending {
@@ -1401,7 +1407,7 @@ mod tests {
     /// or make a key live twice, and the log refuses the whole update.
     #[test]
     fn edits_another_device_wrote_first_are_dropped_rather_than_refused() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let (mut phone, mut laptop, addr, _vaults) = two_devices(&store);
         let key = hex::encode(installation_key());
 
@@ -1435,22 +1441,20 @@ mod tests {
         );
     }
 
-    /// The store took the write and then failed the read after it. The write
-    /// is what the store holds, so it is shown as landed rather than failed.
+    /// The registry took the write and then stopped answering. The write is
+    /// what it holds, so it is shown as landed rather than failed.
     #[test]
     fn a_publish_is_shown_as_landed_without_reading_the_store_back() {
-        use crate::store::tests::{answer, json_error, serve};
-        let url = serve(vec![
-            json_error("404 Not Found", "no account log for account_addr"),
-            answer("204 No Content", "", ""),
-            answer("503 Service Unavailable", "", ""),
-        ]);
+        use crate::store::tests::FakeRegistry;
+        use std::sync::atomic::Ordering;
+        let registry = FakeRegistry::default();
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url(&url));
+        let mut core = AccountCore::new(vault.path(), registry.store());
         let addr = core.create_account(None).unwrap();
 
         core.stage_set_display_name(&addr, "Saro").unwrap();
         assert_eq!(core.publish(&addr).unwrap().first_new_index, Some(0));
+        registry.down.store(true, Ordering::SeqCst);
         let state = core.state(&addr).unwrap();
         assert!(state.published);
         assert_eq!(state.display_name.as_deref(), Some("Saro"));
@@ -1462,7 +1466,7 @@ mod tests {
     #[test]
     fn resolved_means_the_store_answered() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = core.create_account(None).unwrap();
         assert!(!core.state(&addr).unwrap().resolved);
         assert!(!core.accounts().unwrap()[0].resolved);
@@ -1473,7 +1477,8 @@ mod tests {
         assert!(!state.published);
         assert!(core.accounts().unwrap()[0].resolved);
 
-        let mut down = AccountCore::new(vault.path(), Store::from_url("http://127.0.0.1:9"));
+        let unreachable = Store::open("http://127.0.0.1:9", crate::store::tests::PROGRAM);
+        let mut down = AccountCore::new(vault.path(), unreachable);
         assert!(down.refresh(&addr).is_err());
         assert!(!down.state(&addr).unwrap().resolved);
     }
@@ -1516,7 +1521,7 @@ mod tests {
     #[test]
     fn the_live_name_drops_a_staged_rename_and_is_otherwise_refused() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = core.create_account(None).unwrap();
         core.stage_set_display_name(&addr, "Saro").unwrap();
         core.publish(&addr).unwrap();
@@ -1535,7 +1540,7 @@ mod tests {
     #[test]
     fn installations_are_listed_newest_entry_first() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = core.create_account(None).unwrap();
         for _ in 0..2 {
             core.stage_add_installation(&addr, &hex::encode(installation_key()))
@@ -1558,7 +1563,7 @@ mod tests {
     /// apart, as long as it is live, and nothing under profile or chat is.
     #[test]
     fn live_entries_under_other_namespaces_are_listed_apart() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let note = |text: &str| {
@@ -1601,13 +1606,12 @@ mod tests {
     /// log refuse the same key as an installation.
     #[test]
     fn a_key_live_under_any_context_cannot_be_staged() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
         let mut core = AccountCore::new(vault.path(), store.clone());
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
 
         let device = installation_key();
         Account::from_signing_key(key, store)
@@ -1631,13 +1635,12 @@ mod tests {
     /// way an edit already in the log does.
     #[test]
     fn a_staged_key_made_live_under_another_context_is_dropped() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
         let mut core = AccountCore::new(vault.path(), store.clone());
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
         let device = installation_key();
         core.stage_add_installation(&addr, &hex::encode(device))
             .unwrap();
@@ -1665,13 +1668,12 @@ mod tests {
     /// does not, and is refused as it is staged rather than at every publish.
     #[test]
     fn an_edit_past_the_budget_is_refused_as_it_is_staged() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
         let mut core = AccountCore::new(vault.path(), store.clone());
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
 
         publish_elsewhere(key, store, padded_to(Vec::new(), MAX_PAYLOAD_BYTES - 20));
         core.refresh(&addr).unwrap();
@@ -1689,13 +1691,12 @@ mod tests {
     /// its read dropped is still counted once it fails.
     #[test]
     fn a_log_grown_since_staging_is_measured_again_at_publish() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
         let mut core = AccountCore::new(vault.path(), store.clone());
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
         let (first, second) = (installation_key(), installation_key());
         for device in [first, second] {
             core.stage_add_installation(&addr, &hex::encode(device))
@@ -1719,7 +1720,7 @@ mod tests {
     #[test]
     fn an_account_forgotten_and_imported_again_starts_unread() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = core.create_account(None).unwrap();
         core.stage_set_display_name(&addr, "Saro").unwrap();
         core.publish(&addr).unwrap();
@@ -1744,13 +1745,12 @@ mod tests {
     /// signed again, so nothing is staged against it.
     #[test]
     fn a_log_this_build_cannot_read_takes_no_edits() {
-        let mut store = Store::from_url("memory");
+        let mut store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
         let mut core = AccountCore::new(vault.path(), store.clone());
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
 
         let mut draft = AccountLogDraft::new();
         draft
@@ -1781,7 +1781,7 @@ mod tests {
     #[test]
     fn the_accounts_this_app_holds_come_before_the_ones_it_only_reads() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let observed = AccountAddr::from(&Ed25519SigningKey::generate().verifying_key());
 
         assert!(core.observe(&observed).unwrap());
@@ -1807,7 +1807,7 @@ mod tests {
     /// verified against it, on the screen a managed account already has.
     #[test]
     fn an_observed_account_draws_the_log_without_a_key() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         publish_elsewhere(
@@ -1850,7 +1850,7 @@ mod tests {
     #[test]
     fn an_observed_account_takes_no_edits() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = AccountAddr::from(&Ed25519SigningKey::generate().verifying_key());
         core.observe(&addr).unwrap();
 
@@ -1886,7 +1886,7 @@ mod tests {
     #[test]
     fn an_account_neither_held_nor_observed_is_not_read_at_all() {
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         let addr = AccountAddr::from(&Ed25519SigningKey::generate().verifying_key());
 
         assert!(matches!(core.refresh(&addr), Err(CoreError::Unknown)));
@@ -1908,11 +1908,10 @@ mod tests {
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url("memory"));
+        let mut core = AccountCore::new(vault.path(), Store::memory());
         core.observe(&addr).unwrap();
 
-        core.import_account(&hex::encode(key.as_bytes()), None)
-            .unwrap();
+        core.import_account(&hex::encode(key.seed()), None).unwrap();
 
         let accounts = core.accounts().unwrap();
         assert_eq!(accounts.len(), 1);
@@ -1934,7 +1933,7 @@ mod tests {
     /// starts from the store rather than from what was already on screen.
     #[test]
     fn stop_observing_drops_the_account_and_what_was_read() {
-        let store = Store::from_url("memory");
+        let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
         publish_elsewhere(
@@ -1966,7 +1965,7 @@ mod tests {
     /// says which way the read failed rather than that it failed.
     #[test]
     fn a_log_the_address_did_not_sign_leaves_the_account_unread() {
-        let mut store = Store::from_url("memory");
+        let mut store = Store::memory();
         let addr = AccountAddr::from(&Ed25519SigningKey::generate().verifying_key());
         store
             .publish(&addr, &signed_log(&Ed25519SigningKey::generate(), "Raya"))
@@ -1989,18 +1988,19 @@ mod tests {
     /// and says why it is not the store's last word.
     #[test]
     fn a_read_that_fails_keeps_the_copy_already_read() {
-        use crate::store::tests::{answer_bytes, serve_bytes};
+        use crate::store::tests::FakeRegistry;
+        use std::sync::atomic::Ordering;
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
-        let url = serve_bytes(vec![
-            answer_bytes("200 OK", &signed_log(&key, "Raya").to_bytes()),
-            answer_bytes("503 Service Unavailable", b""),
-        ]);
+        let registry = FakeRegistry::default();
+        let mut store = registry.store();
+        store.publish(&addr, &signed_log(&key, "Raya")).unwrap();
         let vault = tempfile::tempdir().unwrap();
-        let mut core = AccountCore::new(vault.path(), Store::from_url(&url));
+        let mut core = AccountCore::new(vault.path(), store);
         core.observe(&addr).unwrap();
         core.refresh(&addr).unwrap();
 
+        registry.down.store(true, Ordering::SeqCst);
         assert!(core.refresh(&addr).is_err());
 
         let state = core.state(&addr).unwrap();

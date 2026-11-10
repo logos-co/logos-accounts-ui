@@ -10,6 +10,11 @@
 #include <QtGlobal>
 
 #include "account_core.h"
+#include "logos_sdk.h"
+
+#include <chrono>
+#include <future>
+#include <memory>
 
 namespace {
 
@@ -70,9 +75,12 @@ AccountsBackend::AccountsBackend()
     m_pool.setMaxThreadCount(1);
 
     const QString vault = vaultDirectory();
-    const QString store = configuredStoreUrl();
-    m_core = logos_account_core_new(utf8(vault).constData(), utf8(store).constData());
-    setStoreUrl(store);
+    const QString sequencer = configuredSequencerUrl();
+    const QString program = configuredRegistryProgram();
+    m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
+                                    utf8(program).constData());
+    setStoreUrl(sequencer);
+    logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
 
     if (!m_core) {
         setStatusText(QStringLiteral("Could not read the vault"));
@@ -86,6 +94,7 @@ AccountsBackend::AccountsBackend()
 AccountsBackend::~AccountsBackend()
 {
     // The pool holds a raw handle, so it has to drain before the handle goes.
+    m_closing = true;
     m_pool.waitForDone();
     logos_account_core_free(m_core);
 }
@@ -106,19 +115,109 @@ QString AccountsBackend::vaultDirectory()
     return QDir(root).filePath(QStringLiteral("module_data/accounts_ui/vault"));
 }
 
-QString AccountsBackend::configuredStoreUrl()
+QString AccountsBackend::configuredSequencerUrl()
 {
-    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_STORE_URL");
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_SEQUENCER_URL");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
-    return QString::fromUtf8(logos_account_core_default_store_url());
+    return QString::fromUtf8(logos_account_core_default_sequencer_url());
+}
+
+QString AccountsBackend::configuredRegistryProgram()
+{
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_REGISTRY_PROGRAM");
+    if (!override.isEmpty())
+        return QString::fromLocal8Bit(override);
+    return QString::fromUtf8(logos_account_core_default_registry_program());
+}
+
+const char *AccountsBackend::submitTrampoline(void *context, const char *request)
+{
+    auto *self = static_cast<AccountsBackend *>(context);
+    const QByteArray body(request);
+    auto answer = std::make_shared<std::promise<QByteArray>>();
+    std::future<QByteArray> reply = answer->get_future();
+    QMetaObject::invokeMethod(
+        self, [self, body, answer] { answer->set_value(self->submitToWallet(body)); },
+        Qt::QueuedConnection);
+    while (reply.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
+        if (self->m_closing) {
+            self->m_submitReply = compact({{QStringLiteral("ok"), false},
+                                           {QStringLiteral("error"), QStringLiteral("the app is closing")}})
+                                      .toUtf8();
+            return self->m_submitReply.constData();
+        }
+    }
+    self->m_submitReply = reply.get();
+    return self->m_submitReply.constData();
+}
+
+QByteArray AccountsBackend::submitToWallet(const QByteArray &request)
+{
+    const auto fail = [](const QString &error) {
+        return compact({{QStringLiteral("ok"), false}, {QStringLiteral("error"), error}}).toUtf8();
+    };
+    if (!m_contextReady)
+        return fail(QStringLiteral("the LEZ wallet is not reachable yet"));
+
+    const QJsonObject write = QJsonDocument::fromJson(request).object();
+    const quint64 gasLimit = write.value(QStringLiteral("gasLimit")).toVariant().toULongLong();
+    QString problem;
+    const QString payer = payerFor(gasLimit, &problem);
+    if (payer.isEmpty())
+        return fail(problem);
+
+    const QString reply = modules().lez_core.send_generic_public_transaction(
+        QStringList{write.value(QStringLiteral("account")).toString()},
+        QList<bool>{false},
+        QByteArray::fromHex(write.value(QStringLiteral("instruction")).toString().toLatin1()),
+        write.value(QStringLiteral("program")).toString(),
+        payer,
+        QStringList{QString()});
+    const QJsonObject sent = QJsonDocument::fromJson(reply.toUtf8()).object();
+    if (!sent.value(QStringLiteral("success")).toBool()) {
+        const QString error = sent.value(QStringLiteral("error")).toString();
+        return fail(error.isEmpty() ? QStringLiteral("the wallet refused the transaction") : error);
+    }
+    return compact({{QStringLiteral("ok"), true},
+                    {QStringLiteral("txHash"), sent.value(QStringLiteral("tx_hash")).toString()}})
+        .toUtf8();
+}
+
+QString AccountsBackend::payerFor(quint64 gasLimit, QString *problem)
+{
+    const QByteArray override = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER");
+    if (!override.isEmpty())
+        return QString::fromLocal8Bit(override);
+
+    // The chain holds gas limit x base fee (at least 8) while the write runs.
+    const quint64 reserve = gasLimit * 8;
+    const QVariantList accounts = modules().lez_core.list_accounts();
+    if (accounts.isEmpty()) {
+        *problem = QStringLiteral("open the LEZ Wallet app: it holds no account to pay with");
+        return {};
+    }
+    for (const QVariant &entry : accounts) {
+        const QVariantMap account = entry.toMap();
+        if (!account.value(QStringLiteral("is_public"), true).toBool())
+            continue;
+        const QString id = account.value(QStringLiteral("account_id")).toString();
+        bool ok = false;
+        const quint64 balance = modules().lez_core.get_balance(id, true).toULongLong(&ok);
+        if (ok && balance >= reserve)
+            return id;
+    }
+    *problem = QStringLiteral("no public account in the LEZ wallet holds the %1 units a "
+                              "write reserves")
+                   .arg(reserve);
+    return {};
 }
 
 void AccountsBackend::onContextReady()
 {
-    // Nothing is asked of another module: this app depends on none. The hook is
-    // still the first point at which calling out is safe, so the first read of
-    // the store happens here rather than in the constructor.
+    // The first point at which calling out is safe: the LEZ wallet is reached
+    // only from here on, and the first read of the registry happens here
+    // rather than in the constructor.
     m_contextReady = true;
     if (m_core && !selectedAddress().isEmpty())
         refresh();

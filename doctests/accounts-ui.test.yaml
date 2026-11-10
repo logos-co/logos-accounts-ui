@@ -89,11 +89,11 @@ sections:
 
       Two things make that run hermetic. `LOGOS_ACCOUNTS_VAULT_DIR` puts the
       key files in the run's own directory, so the walkthrough always starts
-      from an empty vault. `LOGOS_ACCOUNTS_STORE_URL=memory` selects the
-      in-process store instead of chat-store on devnet, so the run needs no
-      network and leaves no log behind, and the in-process store enforces the
-      same rule chat-store's `/v1/account` does, that a log is accepted only
-      where it extends the one already held.
+      from an empty vault. `LOGOS_ACCOUNTS_SEQUENCER_URL=memory` selects the
+      in-process store instead of the account registry on LEZ, so the run needs
+      no network or wallet and leaves no log behind, and the in-process store
+      enforces the same rule the registry program does, that a log is accepted
+      only where it extends the one already held.
 
       There is nothing to manage until the module holds a key, so an empty vault
       opens the door itself. The app writes accounts, so every account it holds
@@ -199,6 +199,7 @@ sections:
       encoder would be a screen that lies about how much life the account has
       left.
 
-      The store this run published to was in-process. The same bytes go to
-      chat-store once its `/v1/account` route is deployed; nothing above
-      changes, because the service stores the very artifact the app signs.
+      The store this run published to was in-process. Against LEZ the same
+      bytes go to the account registry, paid for by the LEZ wallet; nothing
+      above changes, because the registry stores the very artifact the app
+      signs.

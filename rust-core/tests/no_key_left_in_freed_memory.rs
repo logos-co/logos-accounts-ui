@@ -56,7 +56,7 @@ fn call(reply: *mut c_char) -> serde_json::Value {
 fn importing_and_exporting_a_key_leaves_no_copy_behind() {
     let vault = tempfile::tempdir().unwrap();
     let dir = CString::new(vault.path().to_str().unwrap()).unwrap();
-    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr());
+    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr(), c"".as_ptr());
 
     let secret: [u8; 32] = std::array::from_fn(|i| 0x40 + i as u8);
     let secret_hex = CString::new(hex::encode(secret)).unwrap();
@@ -112,7 +112,7 @@ fn importing_and_exporting_a_key_leaves_no_copy_behind() {
     call(logos_account_core_forget_account(core, address.as_ptr()));
     logos_account_core_free(core);
     ARMED.store(false, Ordering::Relaxed);
-    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr());
+    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr(), c"".as_ptr());
 
     // A key file that fails to parse after its key.
     let imported = call(logos_account_core_import_account(
@@ -141,7 +141,7 @@ fn importing_and_exporting_a_key_leaves_no_copy_behind() {
     // A key still unlocked when the handle goes.
     let vault = tempfile::tempdir().unwrap();
     let dir = CString::new(vault.path().to_str().unwrap()).unwrap();
-    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr());
+    let core = logos_account_core_new(dir.as_ptr(), c"memory".as_ptr(), c"".as_ptr());
     ARMED.store(true, Ordering::Relaxed);
     call(logos_account_core_import_account(
         core,
