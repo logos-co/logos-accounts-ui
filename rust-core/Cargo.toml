@@ -21,9 +21,8 @@ crate-type = ["staticlib", "rlib"]
 # Not published to crates.io, so they come from git by rev.
 account = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
 account-log = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
-# The registry client, without the guest it would embed to deploy the program.
 # account and account-log above must match the libchat source and revision it pins.
-account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "3b8679bba541fff6f858cd1a2f07b338a708b7b4", default-features = false }
+account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "21d846755149b68edd007623088fbad4329fd627" }
 eth-keystore = "0.5"
 hex = "0.4"
 rand = "0.8"

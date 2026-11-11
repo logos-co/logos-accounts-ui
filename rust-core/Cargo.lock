@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "account-registry-client"
 version = "0.1.0"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=3b8679bba541fff6f858cd1a2f07b338a708b7b4#3b8679bba541fff6f858cd1a2f07b338a708b7b4"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=21d846755149b68edd007623088fbad4329fd627#21d846755149b68edd007623088fbad4329fd627"
 dependencies = [
  "account",
  "account-log",
@@ -32,7 +32,6 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "lee",
- "lee_core",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -43,7 +42,7 @@ dependencies = [
 [[package]]
 name = "account-registry-core"
 version = "0.1.0"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=3b8679bba541fff6f858cd1a2f07b338a708b7b4#3b8679bba541fff6f858cd1a2f07b338a708b7b4"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=21d846755149b68edd007623088fbad4329fd627#21d846755149b68edd007623088fbad4329fd627"
 dependencies = [
  "borsh",
  "lee_core",

@@ -21,7 +21,9 @@ use std::time::Duration;
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
-use account_registry_client::{AccountId, LezAccountRegError, PrivateKey, Registry};
+use account_registry_client::{
+    AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
+};
 use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;
@@ -180,13 +182,13 @@ impl AccountPublisher for LezStore {
             .ok_or_else(|| StoreError::Wallet("no LEZ wallet is connected".into()))?;
         let prepared = registry.prepare_append(addr, log)?;
         let request = json!({
-            "program": hex::encode(registry.program().value()),
+            "program": hex::encode(prepared.program.value()),
             "account": hex::encode(prepared.account.value()),
             "instruction": hex::encode(prepared.instruction_data()),
             "gasLimit": prepared.gas_limit,
         });
         submit(&request.to_string()).map_err(StoreError::Wallet)?;
-        Ok(registry.await_append(addr, log, &prepared)?)
+        Ok(registry.await_append(&prepared, PUBLISH_TIMEOUT)?)
     }
 }
 
