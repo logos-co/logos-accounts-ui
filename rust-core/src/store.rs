@@ -444,7 +444,7 @@ pub(crate) mod tests {
         let mut draft = AccountLogDraft::new();
         for value in values {
             draft
-                .add(context.clone(), EntryData::Text((*value).into()))
+                .add(context, EntryData::Text((*value).into()))
                 .unwrap();
         }
         let payload = draft.log().encode().unwrap();

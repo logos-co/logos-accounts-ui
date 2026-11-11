@@ -829,11 +829,11 @@ impl AccountCore {
         for edit in staged {
             match edit {
                 StagedEdit::AddInstallation(key) => entries.push(AccountEntry::add(
-                    SIGNER_CONTEXT.clone(),
+                    *SIGNER_CONTEXT,
                     EntryData::Ed25519Key(key.to_bytes()),
                 )),
                 StagedEdit::SetDisplayName(name) => entries.push(AccountEntry::add(
-                    DISPLAY_NAME_CONTEXT.clone(),
+                    *DISPLAY_NAME_CONTEXT,
                     EntryData::Text(name.clone()),
                 )),
                 StagedEdit::Revoke(_) => {}
@@ -1154,10 +1154,9 @@ fn encoded_size(entries: &[AccountEntry]) -> usize {
 /// price before the edit exists. Every one of them is the same for every
 /// account, and each is measured the same way a row's size is.
 static ENTRY_COSTS: LazyLock<EntryCosts> = LazyLock::new(|| {
-    let empty_name =
-        AccountEntry::add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text(String::new()));
+    let empty_name = AccountEntry::add(*DISPLAY_NAME_CONTEXT, EntryData::Text(String::new()));
     let installation = AccountEntry::add(
-        SIGNER_CONTEXT.clone(),
+        *SIGNER_CONTEXT,
         // Any key measures the same, and a made-up one would have to be a
         // point on the curve to survive the log's own validation.
         EntryData::Ed25519Key(Ed25519SigningKey::generate().verifying_key().to_bytes()),
@@ -1210,7 +1209,7 @@ mod tests {
     fn signed_log(key: &Ed25519SigningKey, name: &str) -> SignedAccountLog {
         let mut draft = AccountLogDraft::new();
         draft
-            .add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text(name.into()))
+            .add(*DISPLAY_NAME_CONTEXT, EntryData::Text(name.into()))
             .unwrap();
         let payload = draft.log().encode().unwrap();
         let signature = key.sign(payload.as_bytes());
@@ -1253,7 +1252,7 @@ mod tests {
         assert_eq!(ENTRY_COSTS.remove, 7);
         assert_eq!(ENTRY_COSTS.display_name, 24);
 
-        let named = AccountEntry::add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text("Saro".into()));
+        let named = AccountEntry::add(*DISPLAY_NAME_CONTEXT, EntryData::Text("Saro".into()));
         assert_eq!(entry_size(&named), ENTRY_COSTS.display_name + 4);
     }
 
@@ -1263,13 +1262,10 @@ mod tests {
     fn the_rows_account_for_the_whole_log() {
         let mut draft = AccountLogDraft::new();
         draft
-            .add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text("Saro".into()))
+            .add(*DISPLAY_NAME_CONTEXT, EntryData::Text("Saro".into()))
             .expect("a name is an entry");
         draft
-            .add(
-                SIGNER_CONTEXT.clone(),
-                EntryData::Ed25519Key(installation_key()),
-            )
+            .add(*SIGNER_CONTEXT, EntryData::Ed25519Key(installation_key()))
             .expect("a key is an entry");
         draft.revoke(0).expect("entry 0 is live");
 
@@ -1367,9 +1363,8 @@ mod tests {
         let store = Store::memory();
         let key = Ed25519SigningKey::generate();
         let addr = AccountAddr::from(&key.verifying_key());
-        let name = |value: &str| {
-            AccountEntry::add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text(value.into()))
-        };
+        let name =
+            |value: &str| AccountEntry::add(*DISPLAY_NAME_CONTEXT, EntryData::Text(value.into()));
 
         let mut phone =
             Account::from_signing_key(Ed25519SigningKey::from_seed(&key.seed()), store.clone());
@@ -1576,12 +1571,9 @@ mod tests {
             key,
             store.clone(),
             vec![
-                AccountEntry::add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text("Raya".into())),
+                AccountEntry::add(*DISPLAY_NAME_CONTEXT, EntryData::Text("Raya".into())),
                 note("revoked"),
-                AccountEntry::add(
-                    SIGNER_CONTEXT.clone(),
-                    EntryData::Ed25519Key(installation_key()),
-                ),
+                AccountEntry::add(*SIGNER_CONTEXT, EntryData::Ed25519Key(installation_key())),
                 note("kept"),
                 AccountEntry::Remove { index: 1 },
             ],
@@ -1703,7 +1695,7 @@ mod tests {
                 .unwrap();
         }
 
-        let endorsed = AccountEntry::add(SIGNER_CONTEXT.clone(), EntryData::Ed25519Key(first));
+        let endorsed = AccountEntry::add(*SIGNER_CONTEXT, EntryData::Ed25519Key(first));
         publish_elsewhere(
             key,
             store,
@@ -1754,7 +1746,7 @@ mod tests {
 
         let mut draft = AccountLogDraft::new();
         draft
-            .add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text("Saro".into()))
+            .add(*DISPLAY_NAME_CONTEXT, EntryData::Text("Saro".into()))
             .unwrap();
         let mut bytes = draft.log().encode().unwrap().as_bytes().to_vec();
         // An opcode no build allocates yet, with an empty body.
@@ -1814,11 +1806,8 @@ mod tests {
             key,
             store.clone(),
             vec![
-                AccountEntry::add(DISPLAY_NAME_CONTEXT.clone(), EntryData::Text("Raya".into())),
-                AccountEntry::add(
-                    SIGNER_CONTEXT.clone(),
-                    EntryData::Ed25519Key(installation_key()),
-                ),
+                AccountEntry::add(*DISPLAY_NAME_CONTEXT, EntryData::Text("Raya".into())),
+                AccountEntry::add(*SIGNER_CONTEXT, EntryData::Ed25519Key(installation_key())),
             ],
         );
         let vault = tempfile::tempdir().unwrap();
@@ -1940,7 +1929,7 @@ mod tests {
             key,
             store.clone(),
             vec![AccountEntry::add(
-                DISPLAY_NAME_CONTEXT.clone(),
+                *DISPLAY_NAME_CONTEXT,
                 EntryData::Text("Raya".into()),
             )],
         );
