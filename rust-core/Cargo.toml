@@ -23,7 +23,7 @@ account = { git = "https://github.com/logos-messaging/libchat", rev = "801240730
 account-log = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
 # The registry client, without the guest it would embed to deploy the program.
 # account and account-log above must match the libchat source and revision it pins.
-account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "493130dd1bb9de3c2e836b98bc7a9cd50058a5a2", default-features = false }
+account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "3b8679bba541fff6f858cd1a2f07b338a708b7b4", default-features = false }
 eth-keystore = "0.5"
 hex = "0.4"
 rand = "0.8"

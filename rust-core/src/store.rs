@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
-use account_registry_client::{AccountId, LezAccountRegError, Registry};
+use account_registry_client::{AccountId, LezAccountRegError, PrivateKey, Registry};
 use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;
@@ -99,6 +99,7 @@ pub struct LezStore {
     sequencer: Arc<str>,
     registry: Result<Registry, Arc<str>>,
     submitter: Submitter,
+    payer: Arc<Mutex<Option<PrivateKey>>>,
 }
 
 impl LezStore {
@@ -118,6 +119,7 @@ impl LezStore {
             sequencer: sequencer.trim_end_matches('/').into(),
             registry,
             submitter: Submitter::default(),
+            payer: Arc::default(),
         }
     }
 
@@ -131,6 +133,17 @@ impl LezStore {
     /// Route every publish through `submit`. Until one is set, a publish fails.
     pub fn set_submitter(&self, submit: Arc<Submit>) {
         *self.submitter.0.lock().expect("submitter lock") = Some(submit);
+    }
+
+    /// Pay for every publish with `key` (hex), a funded LEE account's key,
+    /// instead of going through the submitter. For running without a wallet.
+    pub fn set_payer_key(&self, key: &str) -> Result<(), StoreError> {
+        let key = key
+            .trim()
+            .parse::<PrivateKey>()
+            .map_err(|_| StoreError::NotConfigured("the payer key is not a LEE key".into()))?;
+        *self.payer.lock().expect("payer lock") = Some(key);
+        Ok(())
     }
 
     fn registry(&self) -> Result<&Registry, StoreError> {
@@ -155,6 +168,9 @@ impl AccountPublisher for LezStore {
     /// it, and waits until the chain holds `log`.
     fn publish(&mut self, addr: &AccountAddr, log: &SignedAccountLog) -> Result<(), Self::Error> {
         let registry = self.registry()?;
+        if let Some(payer) = self.payer.lock().expect("payer lock").clone() {
+            return Ok(registry.clone().with_payer(payer).publish(addr, log)?);
+        }
         let submit = self
             .submitter
             .0
@@ -396,6 +412,14 @@ impl Store {
             Self::Lez(store) => store.describe(),
             Self::Chat(store) => store.base_url().to_owned(),
             Self::Memory(_) => "memory".to_owned(),
+        }
+    }
+
+    /// See [`LezStore::set_payer_key`]. The other stores take no payer.
+    pub fn set_payer_key(&self, key: &str) -> Result<(), StoreError> {
+        match self {
+            Self::Lez(store) => store.set_payer_key(key),
+            _ => Ok(()),
         }
     }
 

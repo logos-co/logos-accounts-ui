@@ -29,6 +29,7 @@
 #ifndef LOGOS_ACCOUNT_CORE_H
 #define LOGOS_ACCOUNT_CORE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -58,6 +59,11 @@ LogosAccountCore *logos_account_core_new(const char *vault_dir, const char *sequ
 // selects the in-process store.
 LogosAccountCore *logos_account_core_new_with_chat_store(const char *vault_dir,
                                                          const char *store_url);
+
+// Pay for every registry publish with `key_hex`, the key of a funded LEE
+// account, instead of the submitter: no wallet is involved. Returns false if
+// the key does not parse. Safe on NULL.
+bool logos_account_core_set_payer_key(LogosAccountCore *core, const char *key_hex);
 
 // Sends one registry write. Called from the thread a publish runs on, with
 //

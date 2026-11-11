@@ -40,7 +40,10 @@ names another. The registry accepts a log only where it extends the one it
 holds, and caps a log at 32 KiB. A published log is permanent.
 
 The registry program is not deployed yet: set `LOGOS_ACCOUNTS_REGISTRY_PROGRAM`
-to its base58 account id. Until then, `LOGOS_ACCOUNTS_STORE_URL` publishes to
+to its base58 account id. `LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, the hex key of a
+funded LEZ account, pays for writes directly, with no wallet: with
+`LOGOS_ACCOUNTS_SEQUENCER_URL=http://localhost:3040` that is how the app runs
+against a local sequencer. Until then, `LOGOS_ACCOUNTS_STORE_URL` publishes to
 chat-store's `/v1/account` instead, e.g. `https://devnet.chat-kc.logos.co`, with
 no wallet involved.
 

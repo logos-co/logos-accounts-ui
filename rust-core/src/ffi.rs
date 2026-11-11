@@ -90,6 +90,23 @@ pub extern "C" fn logos_account_core_new_with_chat_store(
     Box::into_raw(Box::new(LogosAccountCore(Mutex::new(core))))
 }
 
+/// Pay for every registry publish with `key_hex`, a funded LEE account's key,
+/// instead of the submitter. Returns false if the key does not parse.
+#[no_mangle]
+pub extern "C" fn logos_account_core_set_payer_key(
+    core: *mut LogosAccountCore,
+    key_hex: *const c_char,
+) -> bool {
+    let (Some(core), Some(key)) = (unsafe { core.as_ref() }, str_arg(key_hex)) else {
+        return false;
+    };
+    let guard = core
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard.store().set_payer_key(key).is_ok()
+}
+
 /// Sends one prepared registry write; see `include/account_core.h`.
 pub type SubmitFn =
     unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;

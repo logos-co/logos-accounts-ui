@@ -86,7 +86,11 @@ AccountsBackend::AccountsBackend()
         m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
                                         utf8(program).constData());
         setStoreUrl(sequencer);
-        logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
+        const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
+        if (payerKey.isEmpty())
+            logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
+        else if (!logos_account_core_set_payer_key(m_core, payerKey.constData()))
+            qCWarning(lcBackend) << "LOGOS_ACCOUNTS_LEZ_PAYER_KEY is not a LEE key";
     }
 
     if (!m_core) {
@@ -197,8 +201,9 @@ QString AccountsBackend::payerFor(quint64 gasLimit, QString *problem)
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
 
-    // The chain holds gas limit x base fee (at least 8) while the write runs.
-    const quint64 reserve = gasLimit * 8;
+    // The wallet reserves its own gas_limit, at most the 10M cap, x base fee (at least 8).
+    Q_UNUSED(gasLimit);
+    const quint64 reserve = 10'000'000ULL * 8;
     const QVariantList accounts = modules().lez_core.list_accounts();
     if (accounts.isEmpty()) {
         *problem = QStringLiteral("open the LEZ Wallet app: it holds no account to pay with");
