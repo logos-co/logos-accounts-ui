@@ -21,7 +21,7 @@
     # program binaries from an artifacts/ directory it looks for above itself,
     # which the vendored crate lacks.
     logos-execution-zone = {
-      url = "github:logos-blockchain/logos-execution-zone/v0.3.2";
+      url = "github:logos-blockchain/logos-execution-zone/v0.4.0-rc3";
       flake = false;
     };
   };

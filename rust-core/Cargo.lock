@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "account-registry-client"
 version = "0.1.0"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=7b87d8892a0230332a2fe2bb0b17fe9689f8e319#7b87d8892a0230332a2fe2bb0b17fe9689f8e319"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=4527b552603c8d298c5017691b7de679516fccf2#4527b552603c8d298c5017691b7de679516fccf2"
 dependencies = [
  "account",
  "account-log",
@@ -42,7 +42,7 @@ dependencies = [
 [[package]]
 name = "account-registry-core"
 version = "0.1.0"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=7b87d8892a0230332a2fe2bb0b17fe9689f8e319#7b87d8892a0230332a2fe2bb0b17fe9689f8e319"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=4527b552603c8d298c5017691b7de679516fccf2#4527b552603c8d298c5017691b7de679516fccf2"
 dependencies = [
  "borsh",
  "lee_core",
@@ -468,7 +468,7 @@ dependencies = [
 [[package]]
 name = "build_utils"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.3.2#ee6ed4470059d0ac113e2e358dbe25aad3e8b0a9"
+source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.4.0-rc3#bafd07be0701398f9bc435f73ab05e9a7936c301"
 dependencies = [
  "anyhow",
  "risc0-binfmt",
@@ -513,15 +513,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "bytesize"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7354288c522e7e980fafd2075d63d1285794c3a6a16cdd492f189ea406e5f18b"
-dependencies = [
- "serde_core",
 ]
 
 [[package]]
@@ -1864,7 +1855,7 @@ dependencies = [
 [[package]]
 name = "lee"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.3.2#ee6ed4470059d0ac113e2e358dbe25aad3e8b0a9"
+source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.4.0-rc3#bafd07be0701398f9bc435f73ab05e9a7936c301"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1879,19 +1870,20 @@ dependencies = [
  "risc0-zkos-v1compat",
  "risc0-zkvm",
  "rpds",
+ "serde",
  "serde_with",
  "sha2",
  "thiserror 2.0.20",
+ "zeroize",
 ]
 
 [[package]]
 name = "lee_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.3.2#ee6ed4470059d0ac113e2e358dbe25aad3e8b0a9"
+source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.4.0-rc3#bafd07be0701398f9bc435f73ab05e9a7936c301"
 dependencies = [
  "base58",
  "borsh",
- "bytesize",
  "chacha20",
  "derive_more 2.1.1",
  "ml-kem",
@@ -2286,12 +2278,13 @@ dependencies = [
 [[package]]
 name = "program_loader_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.3.2#ee6ed4470059d0ac113e2e358dbe25aad3e8b0a9"
+source = "git+https://github.com/logos-blockchain/logos-execution-zone?tag=v0.4.0-rc3#bafd07be0701398f9bc435f73ab05e9a7936c301"
 dependencies = [
  "borsh",
  "lee_core",
  "risc0-binfmt",
  "risc0-zkos-v1compat",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
