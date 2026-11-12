@@ -63,7 +63,7 @@ Rectangle {
 
         LogosText {
             Layout.fillWidth: true
-            text: root.url + "/v1/account/" + Fmt.mid(root.address, 6)
+            text: root.url + Fmt.mid(root.address, 6)
             textFormat: Text.PlainText
             elide: Text.ElideRight
             font.family: Theme.typography.mono

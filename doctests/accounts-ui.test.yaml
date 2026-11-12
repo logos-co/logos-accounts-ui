@@ -24,7 +24,7 @@ what_you_learn:
   - "Why an account is a log, and why nothing in it is ever removed"
   - "What an account without its key is, and what a module can do with one"
   - "What a staged edit is, and why a publish is all of them or none"
-  - "What each kind of entry costs the log's 128 KiB lifetime budget, and where that number comes from"
+  - "What each kind of entry costs the log's 32 KiB lifetime budget, and where that number comes from"
   - "How a `ui_qml` Logos plugin is launched standalone and driven headless"
 
 prerequisites:
@@ -181,7 +181,7 @@ sections:
                 pictures above came from: the `walkthrough` app holds the
                 finished window open, and this step attaches to it and reads the
                 log's own cells back. The meter reads what the two entries spent
-                against the format's 128 KiB cap, and every number in it was
+                against the registry's 32 KiB cap, and every number in it was
                 measured by encoding the entry with the format's own encoder.
               screenshot: "accountlog.png"
 
@@ -189,7 +189,7 @@ sections:
     text: |
       Two entries, 93 bytes of signed payload: a 17-byte domain prefix that
       every account log leads with, 28 for the name, 48 for the endorsement.
-      The format caps the payload at 128 KiB, and that cap is a **lifetime**
+      The registry caps the payload at 32 KiB, and that cap is a **lifetime**
       budget, because nothing is ever removed to make room. A new name later
       costs only its own entry, and `Saro` stays readable beneath it.
 

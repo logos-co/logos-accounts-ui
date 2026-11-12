@@ -1973,6 +1973,25 @@ mod tests {
         assert_eq!(state.problem, Some(ReadProblem::Unverified));
     }
 
+    /// The registry's log is checked here too, so it fails the same way.
+    #[test]
+    fn a_registry_log_the_address_did_not_sign_is_unverified() {
+        use crate::store::tests::FakeRegistry;
+        let registry = FakeRegistry::default();
+        let addr = AccountAddr::from(&Ed25519SigningKey::generate().verifying_key());
+        registry.hold(&addr, &signed_log(&Ed25519SigningKey::generate(), "Raya"));
+        let vault = tempfile::tempdir().unwrap();
+        let mut core = AccountCore::new(vault.path(), registry.store());
+        core.observe(&addr).unwrap();
+
+        assert!(core.refresh(&addr).is_err());
+
+        assert_eq!(
+            core.state(&addr).unwrap().problem,
+            Some(ReadProblem::Unverified)
+        );
+    }
+
     /// A store that stops answering leaves the copy already read where it is,
     /// and says why it is not the store's last word.
     #[test]

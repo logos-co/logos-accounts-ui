@@ -5,10 +5,10 @@ import QtQuick
 // The formatting rules the whole app shares, in one place so a log cannot be
 // numbered one way in the table and another way in the sentence beside it.
 QtObject {
-    // The account log's own lifetime budget, from the format: 128 KiB. The
+    // The account log's lifetime budget, the registry's cap: 32 KiB. The
     // backend reports it per account too; this is the fallback for a screen
     // drawn before any account has been read.
-    readonly property int maxBytes: 131072
+    readonly property int maxBytes: 32768
 
     // First `keep` characters, then the last `keep`. What the mockup calls
     // mid(): an address or a key is recognised by both ends, never by the

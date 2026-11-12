@@ -36,7 +36,7 @@ before showing it.
 A publish is an `Append` transaction, and LEZ charges a fee for it, so the app
 sends it through the **LEZ Wallet** module, which must be open. The first
 public wallet account that can cover the fee pays; `LOGOS_ACCOUNTS_LEZ_PAYER`
-names another. The registry accepts a log only where it extends the one it
+names another, by its hex account id. The registry accepts a log only where it extends the one it
 holds, and caps a log at 32 KiB. A published log is permanent.
 
 The app speaks LEZ v0.4, so it needs a v0.4 sequencer and a registry deployed

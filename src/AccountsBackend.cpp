@@ -12,6 +12,7 @@
 #include "account_core.h"
 #include "logos_sdk.h"
 
+#include <algorithm>
 #include <chrono>
 #include <future>
 #include <memory>
@@ -68,6 +69,26 @@ QString droppedText(int count)
               .arg(count);
 }
 
+/// A store's address without the slash it may end in.
+QString locationPrefix(QString url)
+{
+    while (url.endsWith(QLatin1Char('/')))
+        url.chop(1);
+    return url;
+}
+
+/// Whether `balance`, a u128 in decimal, is at least `reserve`.
+bool covers(const QString &balance, quint64 reserve)
+{
+    bool ok = false;
+    const quint64 value = balance.toULongLong(&ok);
+    if (ok)
+        return value >= reserve;
+    // Digits that overflow 64 bits are more than any reserve.
+    return !balance.isEmpty()
+        && std::all_of(balance.cbegin(), balance.cend(), [](QChar c) { return c.isDigit(); });
+}
+
 } // namespace
 
 AccountsBackend::AccountsBackend()
@@ -79,13 +100,13 @@ AccountsBackend::AccountsBackend()
     if (!chatStore.isEmpty()) {
         m_core = logos_account_core_new_with_chat_store(utf8(vault).constData(),
                                                         utf8(chatStore).constData());
-        setStoreUrl(chatStore);
+        setStoreUrl(locationPrefix(chatStore) + QStringLiteral("/v1/account/"));
     } else {
         const QString sequencer = configuredSequencerUrl();
         const QString program = configuredRegistryProgram();
         m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
                                         utf8(program).constData());
-        setStoreUrl(sequencer);
+        setStoreUrl(locationPrefix(sequencer) + QStringLiteral(" \u00b7 "));
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
         if (payerKey.isEmpty())
             logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
@@ -172,9 +193,8 @@ QByteArray AccountsBackend::submitToWallet(const QByteArray &request)
         return fail(QStringLiteral("the LEZ wallet is not reachable yet"));
 
     const QJsonObject write = QJsonDocument::fromJson(request).object();
-    const quint64 gasLimit = write.value(QStringLiteral("gasLimit")).toVariant().toULongLong();
     QString problem;
-    const QString payer = payerFor(gasLimit, &problem);
+    const QString payer = payerFor(&problem);
     if (payer.isEmpty())
         return fail(problem);
 
@@ -195,14 +215,13 @@ QByteArray AccountsBackend::submitToWallet(const QByteArray &request)
         .toUtf8();
 }
 
-QString AccountsBackend::payerFor(quint64 gasLimit, QString *problem)
+QString AccountsBackend::payerFor(QString *problem)
 {
     const QByteArray override = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
 
     // The wallet reserves its own gas_limit, at most the 10M cap, x base fee (at least 8).
-    Q_UNUSED(gasLimit);
     const quint64 reserve = 10'000'000ULL * 8;
     const QVariantList accounts = modules().lez_core.list_accounts();
     if (accounts.isEmpty()) {
@@ -214,9 +233,7 @@ QString AccountsBackend::payerFor(quint64 gasLimit, QString *problem)
         if (!account.value(QStringLiteral("is_public"), true).toBool())
             continue;
         const QString id = account.value(QStringLiteral("account_id")).toString();
-        bool ok = false;
-        const quint64 balance = modules().lez_core.get_balance(id, true).toULongLong(&ok);
-        if (ok && balance >= reserve)
+        if (covers(modules().lez_core.get_balance(id, true), reserve))
             return id;
     }
     *problem = QStringLiteral("no public account in the LEZ wallet holds the %1 units a "

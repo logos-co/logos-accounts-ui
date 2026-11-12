@@ -35,9 +35,6 @@ pub const DEFAULT_SEQUENCER_URL: &str = "https://testnet.lez.logos.co";
 /// so a caller must name one.
 pub const DEFAULT_REGISTRY_PROGRAM: &str = "";
 
-/// The devnet chat-store the chat team runs, for `LOGOS_ACCOUNTS_STORE_URL`.
-pub const DEFAULT_CHAT_STORE_URL: &str = "https://devnet.chat-kc.logos.co";
-
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The largest artifact chat-store can answer with: the format's payload cap
@@ -158,8 +155,18 @@ impl LezStore {
 impl AccountProvider for LezStore {
     type Error = StoreError;
 
+    /// The log as the chain holds it, not yet checked against `addr`: the
+    /// resolver verifies it, as it does what the other stores serve.
     fn fetch(&self, addr: &AccountAddr) -> Result<Option<SignedAccountLog>, Self::Error> {
-        Ok(self.registry()?.fetch(addr)?)
+        let registry = self.registry()?;
+        let account = registry.account(registry.account_id(addr))?;
+        let data: &[u8] = account.data.actor_state(registry.program());
+        if data.is_empty() {
+            return Ok(None);
+        }
+        SignedAccountLog::from_bytes(data)
+            .map(Some)
+            .map_err(|e| StoreError::Malformed(e.to_string()))
     }
 }
 
@@ -604,6 +611,13 @@ pub(crate) mod tests {
                 )
             };
             reader.into_inner().write_all(response.as_bytes()).unwrap();
+        }
+
+        /// Puts `log` on chain as `addr`'s, whoever signed it.
+        pub(crate) fn hold(&self, addr: &AccountAddr, log: &SignedAccountLog) {
+            let registry = Registry::connect("http://localhost", PROGRAM.parse().unwrap()).unwrap();
+            let account = hex::encode(registry.account_id(addr).value());
+            self.shards.lock().unwrap().insert(account, log.to_bytes());
         }
 
         /// The program's append: signature, then stored payload, then entries.
