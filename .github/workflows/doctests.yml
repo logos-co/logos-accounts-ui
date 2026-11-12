@@ -78,6 +78,13 @@ jobs:
       - name: Install GL libraries
         run: sudo apt-get update && sudo apt-get install -y libopengl0 libglx0 libgl1 libegl1
 
+      # A cold build outlasts the doc-test's 30-minute wait for the app.
+      - name: Build the walkthrough app
+        shell: bash
+        run: |
+          sha="${{ steps.commit.outputs.sha }}"
+          nix build --no-link "github:logos-co/logos-accounts-ui${sha:+/$sha}#walkthrough"
+
       - name: Run doc-tests
         shell: bash
         run: |

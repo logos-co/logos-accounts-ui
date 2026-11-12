@@ -24,7 +24,7 @@ what_you_learn:
   - "Why an account is a log, and why nothing in it is ever removed"
   - "What an account without its key is, and what a module can do with one"
   - "What a staged edit is, and why a publish is all of them or none"
-  - "What each kind of entry costs the log's 128 KiB lifetime budget, and where that number comes from"
+  - "What each kind of entry costs the log's 32 KiB lifetime budget, and where that number comes from"
   - "How a `ui_qml` Logos plugin is launched standalone and driven headless"
 
 prerequisites:
@@ -89,11 +89,11 @@ sections:
 
       Two things make that run hermetic. `LOGOS_ACCOUNTS_VAULT_DIR` puts the
       key files in the run's own directory, so the walkthrough always starts
-      from an empty vault. `LOGOS_ACCOUNTS_STORE_URL=memory` selects the
-      in-process store instead of chat-store on devnet, so the run needs no
-      network and leaves no log behind, and the in-process store enforces the
-      same rule chat-store's `/v1/account` does, that a log is accepted only
-      where it extends the one already held.
+      from an empty vault. `LOGOS_ACCOUNTS_SEQUENCER_URL=memory` selects the
+      in-process store instead of the account registry on LEZ, so the run needs
+      no network or wallet and leaves no log behind, and the in-process store
+      enforces the same rule the registry program does, that a log is accepted
+      only where it extends the one already held.
 
       There is nothing to manage until the module holds a key, so an empty vault
       opens the door itself. The app writes accounts, so every account it holds
@@ -181,7 +181,7 @@ sections:
                 pictures above came from: the `walkthrough` app holds the
                 finished window open, and this step attaches to it and reads the
                 log's own cells back. The meter reads what the two entries spent
-                against the format's 128 KiB cap, and every number in it was
+                against the registry's 32 KiB cap, and every number in it was
                 measured by encoding the entry with the format's own encoder.
               screenshot: "accountlog.png"
 
@@ -189,7 +189,7 @@ sections:
     text: |
       Two entries, 93 bytes of signed payload: a 17-byte domain prefix that
       every account log leads with, 28 for the name, 48 for the endorsement.
-      The format caps the payload at 128 KiB, and that cap is a **lifetime**
+      The registry caps the payload at 32 KiB, and that cap is a **lifetime**
       budget, because nothing is ever removed to make room. A new name later
       costs only its own entry, and `Saro` stays readable beneath it.
 
@@ -199,6 +199,7 @@ sections:
       encoder would be a screen that lies about how much life the account has
       left.
 
-      The store this run published to was in-process. The same bytes go to
-      chat-store once its `/v1/account` route is deployed; nothing above
-      changes, because the service stores the very artifact the app signs.
+      The store this run published to was in-process. Against LEZ the same
+      bytes go to the account registry, paid for by the LEZ wallet; nothing
+      above changes, because the registry stores the very artifact the app
+      signs.

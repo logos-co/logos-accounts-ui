@@ -74,12 +74,16 @@ jobs:
             exit 1
           fi
           echo "importpath=$importpath" >> "$GITHUB_OUTPUT"
+          # The Qt the module builder ships, which ui-host runs this view on.
+          nixpkgs="$(nix eval --impure --raw --expr \
+            '(builtins.getFlake (toString ./.)).inputs.logos-module-builder.inputs.nixpkgs.outPath')"
+          echo "nixpkgs=$nixpkgs" >> "$GITHUB_OUTPUT"
 
       - name: qmllint
         shell: bash
         run: |
           set -euo pipefail
-          nix shell nixpkgs#qt6.qtdeclarative --command bash -c '
+          nix shell "${{ steps.ds.outputs.nixpkgs }}#qt6.qtdeclarative" --command bash -c '
             set -euo pipefail
             qmllint --version
             # This qmllint is unwrapped, so QtQuick is not on its default

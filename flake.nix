@@ -2,17 +2,31 @@
   description = "logos-accounts-ui: hold an account's key, write its log, publish it.";
 
   inputs = {
-    # The only input. This app depends on no Logos module: everything it knows
-    # about an account is in the Rust library below, linked into the plugin.
-    #
     # The revision basecamp 0.3.0 builds logos-package-manager-ui with, which
     # pins the SDK, protocol, ui-host and design system that host runs. The view
     # compiles against the host's design system at runtime, so a control the
     # host lacks fails qmllint and the walkthrough here.
     logos-module-builder.url = "github:logos-co/logos-module-builder/1adcfb86d80daab42d49bb72ab06ac9737b28575";
+
+    # The LEZ wallet, which pays for every write to the account registry.
+    lez_core.url = "github:logos-blockchain/logos-execution-zone-module/fdd6a75a74c6b18a11f5d92eb625c628fd251ac8";
+
+    # The account crates need a newer Rust than the builder's 1.89. Official
+    # binaries, built against an old glibc, so the archive still links into a
+    # plugin built against the builder's.
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "logos-module-builder/nixpkgs";
+
+    # The LEZ release the registry client pins. Its `lee` build script embeds
+    # program binaries from an artifacts/ directory it looks for above itself,
+    # which the vendored crate lacks.
+    logos-execution-zone = {
+      url = "github:logos-blockchain/logos-execution-zone/v0.3.2";
+      flake = false;
+    };
   };
 
-  outputs = inputs@{ logos-module-builder, ... }:
+  outputs = inputs@{ logos-module-builder, rust-overlay, logos-execution-zone, ... }:
     let
       common = logos-module-builder.lib.common;
       lib = logos-module-builder.inputs.nixpkgs.lib;
@@ -34,8 +48,13 @@
       # is what a separate library flake needs a `follows` to achieve; and the
       # library and the plugin that links it are versioned by one commit.
       accountCore = system:
-        let pkgs = common.mkPkgs system;
-        in pkgs.rustPlatform.buildRustPackage {
+        let
+          pkgs = (common.mkPkgs system).extend rust-overlay.overlays.default;
+          rust = pkgs.pkgsBuildHost.rust-bin.stable."1.93.0".minimal.override {
+            targets = [ pkgs.stdenv.hostPlatform.rust.rustcTarget ];
+          };
+          rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
+        in rustPlatform.buildRustPackage {
           pname = "logos-account-core";
           version = "0.3.0";
 
@@ -52,6 +71,10 @@
             # alternative is an `outputHashes` entry rewritten at every re-pin.
             allowBuiltinFetchGit = true;
           };
+
+          preBuild = ''
+            cp -r ${logos-execution-zone}/artifacts "$NIX_BUILD_TOP/artifacts"
+          '';
 
           # The vault, the staging rules and the C ABI, all of which are correct
           # or not without a runtime to host them. Under cross the test binary

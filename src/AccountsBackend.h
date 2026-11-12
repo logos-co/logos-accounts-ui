@@ -56,11 +56,14 @@ public:
     /// set, otherwise `module_data/accounts_ui/vault` under `LOGOS_USER_DIR`,
     /// or under ui-host's application data when the host exports no root.
     static QString vaultDirectory();
-    /// `LOGOS_ACCOUNTS_STORE_URL` if it is set, otherwise the library's own
-    /// default. The literal "memory" runs against an in-process store. Named
-    /// apart from the `storeUrl` property, which the replica reads and which
-    /// this is the source of.
-    static QString configuredStoreUrl();
+    /// `LOGOS_ACCOUNTS_SEQUENCER_URL` if it is set, otherwise the library's
+    /// default LEZ sequencer. Not used when `LOGOS_ACCOUNTS_STORE_URL` names a
+    /// chat-store to publish to instead. The literal "memory" runs against an in-process
+    /// store.
+    static QString configuredSequencerUrl();
+    /// `LOGOS_ACCOUNTS_REGISTRY_PROGRAM` if it is set, otherwise the library's
+    /// default: the base58 account the registry program is deployed at.
+    static QString configuredRegistryProgram();
 
 protected:
     void onContextReady() override;
@@ -88,6 +91,17 @@ private:
     /// After a staged edit lands: the list and the state are drawn again.
     void edited();
 
+    /// The library's submitter: hands `request` to this object's thread and
+    /// waits for the wallet's answer, which stays valid until the next call.
+    static const char *submitTrampoline(void *context, const char *request);
+    /// Sends one prepared registry write through the LEZ wallet module, paid
+    /// by `LOGOS_ACCOUNTS_LEZ_PAYER` or else the wallet's first public account
+    /// that can cover it. Runs on this object's thread. Replies as the
+    /// library's submitter does.
+    QByteArray submitToWallet(const QByteArray &request);
+    /// The wallet account that pays for a write, or empty with `problem` set.
+    QString payerFor(QString *problem);
+
     void setNotice(const QString &kind, const QString &title, const QString &body);
     void report(const QString &what, const QString &message);
 
@@ -104,4 +118,9 @@ private:
     /// Staged edits a read dropped while their account was off screen, said
     /// once it is back.
     QHash<QString, int> m_dropped;
+    /// Set as the backend goes, so a publish waiting on the wallet gives up
+    /// instead of holding the pool the destructor drains.
+    std::atomic<bool> m_closing{false};
+    /// The last submitter reply, which the library reads before the next call.
+    QByteArray m_submitReply;
 };

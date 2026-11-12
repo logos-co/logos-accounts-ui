@@ -6,9 +6,14 @@
 // elsewhere. Nothing below is a Logos module call, so no key and no password
 // crosses a process boundary.
 //
+// Logs live in the account registry on a Logos Execution Zone. Reads go to the
+// sequencer directly. A write is a LEZ transaction someone has to pay for, so
+// the library prepares it and hands it to the submitter the caller registers,
+// which sends it through a wallet.
+//
 // Ownership: every char * returned here belongs to the caller and must be
 // released with logos_account_core_string_free, which clears it first. The
-// one const char *, the default store URL, is static and never freed.
+// const char * defaults are static and never freed.
 //
 // Replies: every call returns JSON with an `ok` field. A failure is
 // {"ok":false,"error":"..."} rather than a null return, so a caller that only
@@ -24,6 +29,7 @@
 #ifndef LOGOS_ACCOUNT_CORE_H
 #define LOGOS_ACCOUNT_CORE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -32,16 +38,48 @@ extern "C" {
 
 typedef struct LogosAccountCore LogosAccountCore;
 
-// The store this app points at when nothing else says otherwise. Static: do
-// not free it.
-const char *logos_account_core_default_store_url(void);
+// The LEZ sequencer this app reads from when nothing else says otherwise, and
+// the registry program on it, empty while none is deployed. Static: do not
+// free them.
+const char *logos_account_core_default_sequencer_url(void);
+const char *logos_account_core_default_registry_program(void);
 
 // Open the vault directory at `vault_dir`, creating it on first write, and
-// point the app at `store_url`. The literal "memory" selects an in-process
-// store, which is what a harness with no network gets.
+// point the app at the account registry deployed at `program` (a base58 LEZ
+// account id) on `sequencer_url`. The literal "memory" as the sequencer
+// selects an in-process store, which is what a harness with no network gets.
+// An empty `program` opens, and fails every read and publish until set.
 //
 // Returns NULL only if an argument is absent or not UTF-8.
-LogosAccountCore *logos_account_core_new(const char *vault_dir, const char *store_url);
+LogosAccountCore *logos_account_core_new(const char *vault_dir, const char *sequencer_url,
+                                         const char *program);
+
+// Like logos_account_core_new, but publishing to chat-store's /v1/account at
+// `store_url` instead of the registry, with no wallet involved. "memory"
+// selects the in-process store.
+LogosAccountCore *logos_account_core_new_with_chat_store(const char *vault_dir,
+                                                         const char *store_url);
+
+// Pay for every registry publish with `key_hex`, the key of a funded LEE
+// account, instead of the submitter: no wallet is involved. Returns false if
+// the key does not parse. Safe on NULL.
+bool logos_account_core_set_payer_key(LogosAccountCore *core, const char *key_hex);
+
+// Sends one registry write. Called from the thread a publish runs on, with
+//
+//   {"program":hex,"account":hex,"instruction":hex,"gasLimit":n}
+//
+// `account` is the one account the transaction names, not signing, in the
+// shard of `program`, and `instruction` its data. The submitter picks the fee
+// payer. It returns {"ok":true} once a sequencer has taken the transaction, or
+// {"ok":false,"error":"..."}; the string stays the submitter's, and must stay
+// valid until the next call. The library then waits for the log on chain.
+typedef const char *(*logos_account_core_submit_fn)(void *context, const char *request_json);
+
+// Route every publish through `submit`. Until one is set, a publish to the
+// registry fails. Safe on NULL.
+void logos_account_core_set_submitter(LogosAccountCore *core, logos_account_core_submit_fn submit,
+                                      void *context);
 
 // Safe on NULL.
 void logos_account_core_free(LogosAccountCore *core);

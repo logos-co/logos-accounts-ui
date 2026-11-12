@@ -4,9 +4,9 @@ version = "0.3.0"
 edition = "2021"
 description = "The account write path as a linkable library: keys in a vault, the log they sign, and the store it is published to."
 license = "MIT OR Apache-2.0"
-# The module builder's rustc, so the MSRV-aware resolver picks dependency
-# versions it can compile.
-rust-version = "1.89"
+# The Rust the flake builds this with, so the MSRV-aware resolver picks
+# dependency versions it can compile.
+rust-version = "1.93"
 
 # Standalone crate: the empty table keeps cargo from adopting a parent workspace.
 [workspace]
@@ -18,9 +18,11 @@ name = "logos_account_core"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-# Not published to crates.io, so they come from logos-chat's main by rev.
-account = { git = "https://github.com/logos-messaging/logos-chat.git", rev = "8f638fcb3b5b90710b30a9816a013f5485542fb2" }
-account-log = { git = "https://github.com/logos-messaging/logos-chat.git", rev = "8f638fcb3b5b90710b30a9816a013f5485542fb2" }
+# Not published to crates.io, so they come from git by rev.
+account = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
+account-log = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
+# account and account-log above must match the libchat source and revision it pins.
+account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", tag = "v0.3.0" }
 eth-keystore = "0.5"
 hex = "0.4"
 rand = "0.8"

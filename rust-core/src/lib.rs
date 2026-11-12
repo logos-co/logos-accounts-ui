@@ -20,5 +20,5 @@ pub mod vault;
 
 pub use manager::{AccountCore, AccountState, AccountSummary, CoreError, MAX_DISPLAY_NAME_BYTES};
 pub use observed::{ObservedAccounts, ObservedError};
-pub use store::{Store, StoreError, DEFAULT_STORE_URL};
+pub use store::{Store, StoreError, Submit, DEFAULT_REGISTRY_PROGRAM, DEFAULT_SEQUENCER_URL};
 pub use vault::{StoredAccount, Vault, VaultError};
