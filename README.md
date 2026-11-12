@@ -39,6 +39,11 @@ public wallet account that can cover the fee pays; `LOGOS_ACCOUNTS_LEZ_PAYER`
 names another, by its hex account id. The registry accepts a log only where it extends the one it
 holds, and caps a log at 32 KiB. A published log is permanent.
 
+The app speaks LEZ v0.4, so it needs a v0.4 sequencer and a registry deployed
+there. The LEZ Wallet module still speaks v0.3, and a v0.4 sequencer refuses
+its transactions: until the module moves to v0.4, pay with
+`LOGOS_ACCOUNTS_LEZ_PAYER_KEY`.
+
 The registry program is not deployed yet: set `LOGOS_ACCOUNTS_REGISTRY_PROGRAM`
 to its base58 account id. `LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, the hex key of a
 funded LEZ account, pays for writes directly, with no wallet: with

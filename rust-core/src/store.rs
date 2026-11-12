@@ -84,8 +84,8 @@ impl From<LezAccountRegError> for StoreError {
 /// {"program": hex, "account": hex, "instruction": hex, "gasLimit": n}
 /// ```
 ///
-/// `account` is the one account the transaction names, not signing, in the
-/// shard of `program`; `instruction` is its data. Whoever implements this
+/// The transaction is one message, `instruction`, to the actor of `program`
+/// on `account`, which does not sign. Whoever implements this
 /// picks the fee payer.
 pub type Submit = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 
@@ -160,7 +160,7 @@ impl AccountProvider for LezStore {
     fn fetch(&self, addr: &AccountAddr) -> Result<Option<SignedAccountLog>, Self::Error> {
         let registry = self.registry()?;
         let account = registry.account(registry.account_id(addr))?;
-        let data: &[u8] = account.data.shard(registry.program()).as_ref();
+        let data: &[u8] = account.data.actor_state(registry.program());
         if data.is_empty() {
             return Ok(None);
         }
@@ -542,7 +542,7 @@ pub(crate) mod tests {
     /// The program account the fake registry is deployed at.
     pub(crate) const PROGRAM: &str = "9y1cAZgyEEZLPAH8q8Z37e6Jvaz2rUTiS8qGm6DpL5BU";
 
-    /// A sequencer serving the registry's shards over `getAccount`, and a
+    /// A sequencer serving the registry's states over `getAccount`, and a
     /// submitter applying each `Append` to them as the program does. `down`
     /// makes every request fail.
     #[derive(Clone, Default)]
@@ -597,16 +597,14 @@ pub(crate) mod tests {
                     .unwrap()
                     .get(&hex::encode(account.value()))
                     .cloned();
-                let shards = match data {
-                    Some(data) => json!({ PROGRAM: data }),
-                    None => json!({}),
+                let result = match data {
+                    Some(data) => {
+                        json!({ "nonce": 0, "data": { "actor_states": { PROGRAM: data } } })
+                    }
+                    None => serde_json::Value::Null,
                 };
-                let reply = json!({
-                    "jsonrpc": "2.0",
-                    "id": request["id"],
-                    "result": { "nonce": 0, "data": { "shards": shards } },
-                })
-                .to_string();
+                let reply =
+                    json!({ "jsonrpc": "2.0", "id": request["id"], "result": result }).to_string();
                 format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
                     reply.len()
@@ -622,7 +620,7 @@ pub(crate) mod tests {
             self.shards.lock().unwrap().insert(account, log.to_bytes());
         }
 
-        /// The program's `apply`: signature, then stored payload, then entries.
+        /// The program's append: signature, then stored payload, then entries.
         fn submit(&self, request: &str) -> Result<(), String> {
             let request: serde_json::Value = serde_json::from_str(request).unwrap();
             self.submitted.lock().unwrap().push(request.clone());
