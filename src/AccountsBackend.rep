@@ -23,7 +23,7 @@
 
 class AccountsBackend
 {
-    // Where publishing goes, for the store strip to name.
+    // Where publishing goes: what the store strip puts before the address.
     PROP(QString storeUrl="" READONLY)
     // One line of plain status: what the app is doing, or last did.
     PROP(QString statusText="Starting" READONLY)

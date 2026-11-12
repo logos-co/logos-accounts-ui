@@ -99,8 +99,8 @@ private:
     /// that can cover it. Runs on this object's thread. Replies as the
     /// library's submitter does.
     QByteArray submitToWallet(const QByteArray &request);
-    /// The wallet account that pays for a write reserving `gasLimit`.
-    QString payerFor(quint64 gasLimit, QString *problem);
+    /// The wallet account that pays for a write, or empty with `problem` set.
+    QString payerFor(QString *problem);
 
     void setNotice(const QString &kind, const QString &title, const QString &body);
     void report(const QString &what, const QString &message);
