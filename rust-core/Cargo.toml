@@ -22,7 +22,7 @@ crate-type = ["staticlib", "rlib"]
 account = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
 account-log = { git = "https://github.com/logos-messaging/libchat", rev = "80124073090287fedc4172a492f9447ffad1782f" }
 # account and account-log above must match the libchat source and revision it pins.
-account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "a45795caf5669df9ebc3b22563e0f7f1d21c2d80" }
+account-registry-client = { git = "https://github.com/logos-messaging/account-registry-lez", rev = "82f8ef373528517845f6fa60dc1796f9a46e90ee" }
 eth-keystore = "0.5"
 hex = "0.4"
 rand = "0.8"
