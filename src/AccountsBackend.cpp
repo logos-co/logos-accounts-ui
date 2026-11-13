@@ -111,7 +111,7 @@ AccountsBackend::AccountsBackend()
         const char *tokenArg = token.isEmpty() ? nullptr : token.constData();
         m_relayPeer = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_PEER");
         m_relayAddr = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_ADDR");
-        const QByteArray relayUrl = qgetenv("LOGOS_ACCOUNTS_RELAY_URL");
+        const QByteArray relayUrl = qgetenv("LOGOS_ACCOUNTS_RELAY_URL").trimmed();
         if (!m_relayPeer.isEmpty() && !m_relayAddr.isEmpty()) {
             logos_account_core_set_relay_sender(m_core, &AccountsBackend::relayTrampoline, this,
                                                 tokenArg);
@@ -232,7 +232,6 @@ QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
     };
     const LogosResult sent = modules().libp2p_module.protocolRequest(compact(args));
     if (!sent.success) {
-        m_libp2pStarted = false;
         const QString error = sent.error.toString();
         return fail(error.isEmpty() ? QStringLiteral("the request did not go through") : error);
     }
@@ -263,12 +262,13 @@ bool AccountsBackend::startLibp2p(QString *problem)
         *problem = QStringLiteral("libp2p did not start: ") + created.error.toString();
         return false;
     }
+    // A second start while one still runs crashes libp2p_module.
+    m_libp2pStarted = true;
     const LogosResult started = modules().libp2p_module.start();
     if (!tolerated(started)) {
         *problem = QStringLiteral("libp2p did not start: ") + started.error.toString();
         return false;
     }
-    m_libp2pStarted = true;
     return true;
 }
 

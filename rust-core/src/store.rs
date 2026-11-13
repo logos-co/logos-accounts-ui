@@ -480,7 +480,12 @@ fn publish_through(
         ));
     }
     match registry.await_append(&prepared, RELAY_WAIT) {
-        Err(LezAccountRegError::Timeout) => Err(StoreError::Relay(
+        Err(
+            LezAccountRegError::Timeout
+            | LezAccountRegError::Transport(_)
+            | LezAccountRegError::Rpc { .. }
+            | LezAccountRegError::Response(_),
+        ) => Err(StoreError::Relay(
             "it accepted the update, which is not on chain yet but may still land; wait before \
              paying with your own funds"
                 .into(),
