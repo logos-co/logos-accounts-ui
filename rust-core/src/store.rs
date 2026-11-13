@@ -31,9 +31,9 @@ use thiserror::Error;
 /// The public LEZ testnet sequencer, used unless the caller names another.
 pub const DEFAULT_SEQUENCER_URL: &str = "https://testnet.lez.logos.co";
 
-/// The registry program on the default sequencer. Unset until it is deployed,
-/// so a caller must name one.
-pub const DEFAULT_REGISTRY_PROGRAM: &str = "";
+/// The registry program on the default sequencer: the public testnet's, as
+/// account-registry-lez lists it.
+pub const DEFAULT_REGISTRY_PROGRAM: &str = "BHNNfnhPMNMZ7N3oAtbu1iM1HkFyraWx2UjBvxhj8wTa";
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
