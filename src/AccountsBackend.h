@@ -102,6 +102,15 @@ private:
     QByteArray submitToWallet(const QByteArray &request);
     /// The wallet account that pays for a write, or empty with `problem` set.
     QString payerFor(QString *problem);
+    /// The library's relay sender: hands `request` to this object's thread and
+    /// waits for the relay's answer, which stays valid until the next call.
+    static const char *relayTrampoline(void *context, const char *request);
+    /// Sends one submission to the relay at `LOGOS_ACCOUNTS_RELAY_PEER` and
+    /// `LOGOS_ACCOUNTS_RELAY_ADDR` over the libp2p module. Runs on this
+    /// object's thread. Replies as the library's relay sender does.
+    QByteArray sendToRelay(const QByteArray &request);
+    /// Makes sure the libp2p module runs a node, or says why not.
+    bool startLibp2p(QString *problem);
 
     void setNotice(const QString &kind, const QString &title, const QString &body);
     void report(const QString &what, const QString &message);
@@ -124,4 +133,9 @@ private:
     std::atomic<bool> m_closing{false};
     /// The last submitter reply, which the library reads before the next call.
     QByteArray m_submitReply;
+    /// The relay reached over libp2p, if any, and its last reply.
+    QString m_relayPeer;
+    QString m_relayAddr;
+    QByteArray m_relayReply;
+    bool m_libp2pStarted = false;
 };

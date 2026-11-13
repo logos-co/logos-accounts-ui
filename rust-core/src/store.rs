@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
-use account_registry_client::relay::{submit_http, RelayAuth, RelayRequest};
+use account_registry_client::relay::{submit_http, RelayAuth, RelayReply, RelayRequest};
 use account_registry_client::{
     AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
 };
@@ -100,10 +100,21 @@ pub type Submit = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 #[derive(Clone, Default)]
 struct Submitter(Arc<Mutex<Option<Arc<Submit>>>>);
 
+/// Sends one submission to an account relay and returns its reply, both as
+/// JSON bytes. Whoever implements this carries them, e.g. over libp2p.
+pub type RelaySend = dyn Fn(&[u8]) -> Result<Vec<u8>, String> + Send + Sync;
+
+/// How submissions reach the relay.
+#[derive(Clone)]
+enum RelayRoute {
+    Http(String),
+    Sender(Arc<RelaySend>),
+}
+
 /// An account relay, which publishes a log and pays its fee.
 #[derive(Clone)]
 struct RelayTarget {
-    url: String,
+    route: RelayRoute,
     token: Option<String>,
 }
 
@@ -167,11 +178,19 @@ impl LezStore {
     /// Have the relay at `url` publish and pay, while sponsoring is on.
     /// `token`, if any, is sent as `token` credentials.
     pub fn set_relay(&self, url: &str, token: Option<&str>) {
-        let target = RelayTarget {
-            url: url.trim().to_owned(),
-            token: token.map(str::to_owned).filter(|token| !token.is_empty()),
-        };
-        *self.relay.lock().expect("relay lock") = Some(target).filter(|t| !t.url.is_empty());
+        let url = url.trim();
+        let route = (!url.is_empty()).then(|| RelayRoute::Http(url.to_owned()));
+        self.route_relay(route, token);
+    }
+
+    /// Like [`Self::set_relay`], with `send` carrying each submission.
+    pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
+        self.route_relay(Some(RelayRoute::Sender(send)), token);
+    }
+
+    fn route_relay(&self, route: Option<RelayRoute>, token: Option<&str>) {
+        let token = token.map(str::to_owned).filter(|token| !token.is_empty());
+        *self.relay.lock().expect("relay lock") = route.map(|route| RelayTarget { route, token });
     }
 
     /// Whether a relay pays for publishes. Off, or with no relay set, the
@@ -441,8 +460,15 @@ fn publish_through(
             kind: "token".into(),
             payload: token,
         });
-    let reply = submit_http(&relay.url, &RelayRequest::new(addr, log, auth))
-        .map_err(|error| StoreError::Relay(format!("it could not be reached: {error}")))?;
+    let request = RelayRequest::new(addr, log, auth);
+    let reply = match &relay.route {
+        RelayRoute::Http(url) => submit_http(url, &request).map_err(|error| error.to_string()),
+        RelayRoute::Sender(send) => send(&request.to_bytes()).and_then(|bytes| {
+            serde_json::from_slice::<RelayReply>(&bytes)
+                .map_err(|error| format!("it answered something else: {error}"))
+        }),
+    }
+    .map_err(|error| StoreError::Relay(format!("it could not be reached: {error}")))?;
     if !reply.accepted {
         return Err(StoreError::Relay(
             reply.reason.unwrap_or_else(|| "it refused".into()),
@@ -519,6 +545,13 @@ impl Store {
     pub fn set_relay(&self, url: &str, token: Option<&str>) {
         if let Self::Lez(store) = self {
             store.set_relay(url, token);
+        }
+    }
+
+    /// See [`LezStore::set_relay_sender`].
+    pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
+        if let Self::Lez(store) = self {
+            store.set_relay_sender(send, token);
         }
     }
 
@@ -784,6 +817,27 @@ pub(crate) mod tests {
         let fake = FakeRegistry::default();
         let mut store = fake.store();
         store.set_relay(&fake.relay(None), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        store.publish(&addr, &log).unwrap();
+        assert_eq!(store.fetch(&addr).unwrap(), Some(log));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_relay_reached_through_a_sender_publishes_too() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        let registry = fake.clone();
+        store.set_relay_sender(
+            Arc::new(move |bytes: &[u8]| {
+                let (addr, log) = RelayRequest::from_bytes(bytes).unwrap().decode().unwrap();
+                registry.hold(&addr, &log);
+                Ok(br#"{"accepted":true}"#.to_vec())
+            }),
+            None,
+        );
         let key = Ed25519SigningKey::generate();
         let (addr, log) = signed(&key, &["saro"]);
 
