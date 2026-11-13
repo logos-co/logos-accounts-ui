@@ -25,6 +25,10 @@ class AccountsBackend
 {
     // Where publishing goes: what the store strip puts before the address.
     PROP(QString storeUrl="" READONLY)
+    // An account relay is configured, so publishing can be sponsored.
+    PROP(bool relayAvailable=false READONLY)
+    // The relay pays for the next publish, not the LEZ wallet.
+    PROP(bool sponsored=true READONLY)
     // One line of plain status: what the app is doing, or last did.
     PROP(QString statusText="Starting" READONLY)
     // Why the last read of the store failed; empty once one succeeds.
@@ -93,6 +97,8 @@ class AccountsBackend
     // Sign and send the staged entries as one update, with the key unlocked
     // or stored unsealed.
     SLOT(void publish())
+    // Who pays for the next publish: the relay, or the LEZ wallet.
+    SLOT(void useRelay(bool on))
 
     SLOT(void dismissNotice())
 

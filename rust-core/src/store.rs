@@ -16,11 +16,13 @@
 //! alternative. A log crosses it as the artifact the account-log crate
 //! transmits, `signature || payload`, in both directions.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
+use account_registry_client::relay::{submit_http, RelayAuth, RelayRequest};
 use account_registry_client::{
     AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
 };
@@ -36,6 +38,10 @@ pub const DEFAULT_SEQUENCER_URL: &str = "https://testnet.lez.logos.co";
 pub const DEFAULT_REGISTRY_PROGRAM: &str = "";
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How long a sponsored publish waits for the relay's write to land. Testnet
+/// makes about one block a minute.
+const RELAY_WAIT: Duration = Duration::from_secs(180);
 
 /// The largest artifact chat-store can answer with: the format's payload cap
 /// plus the signature in front of it.
@@ -59,6 +65,8 @@ pub enum StoreError {
     NotConfigured(String),
     #[error("the LEZ wallet did not send the update: {0}")]
     Wallet(String),
+    #[error("the relay did not publish the update: {0}")]
+    Relay(String),
 }
 
 impl From<LezAccountRegError> for StoreError {
@@ -92,6 +100,13 @@ pub type Submit = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 #[derive(Clone, Default)]
 struct Submitter(Arc<Mutex<Option<Arc<Submit>>>>);
 
+/// An account relay, which publishes a log and pays its fee.
+#[derive(Clone)]
+struct RelayTarget {
+    url: String,
+    token: Option<String>,
+}
+
 /// The account registry on a LEZ sequencer.
 #[derive(Clone)]
 pub struct LezStore {
@@ -99,6 +114,8 @@ pub struct LezStore {
     registry: Result<Registry, Arc<str>>,
     submitter: Submitter,
     payer: Arc<Mutex<Option<PrivateKey>>>,
+    relay: Arc<Mutex<Option<RelayTarget>>>,
+    sponsored: Arc<AtomicBool>,
 }
 
 impl LezStore {
@@ -119,6 +136,8 @@ impl LezStore {
             registry,
             submitter: Submitter::default(),
             payer: Arc::default(),
+            relay: Arc::default(),
+            sponsored: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -143,6 +162,30 @@ impl LezStore {
             .map_err(|_| StoreError::NotConfigured("the payer key is not a LEE key".into()))?;
         *self.payer.lock().expect("payer lock") = Some(key);
         Ok(())
+    }
+
+    /// Have the relay at `url` publish and pay, while sponsoring is on.
+    /// `token`, if any, is sent as `token` credentials.
+    pub fn set_relay(&self, url: &str, token: Option<&str>) {
+        let target = RelayTarget {
+            url: url.trim().to_owned(),
+            token: token.map(str::to_owned).filter(|token| !token.is_empty()),
+        };
+        *self.relay.lock().expect("relay lock") = Some(target).filter(|t| !t.url.is_empty());
+    }
+
+    /// Whether a relay pays for publishes. Off, or with no relay set, the
+    /// account's own funds do.
+    pub fn set_sponsored(&self, on: bool) {
+        self.sponsored.store(on, Ordering::SeqCst);
+    }
+
+    /// The relay that pays for the next publish, if any.
+    fn sponsor(&self) -> Option<RelayTarget> {
+        if !self.sponsored.load(Ordering::SeqCst) {
+            return None;
+        }
+        self.relay.lock().expect("relay lock").clone()
     }
 
     fn registry(&self) -> Result<&Registry, StoreError> {
@@ -177,6 +220,9 @@ impl AccountPublisher for LezStore {
     /// it, and waits until the chain holds `log`.
     fn publish(&mut self, addr: &AccountAddr, log: &SignedAccountLog) -> Result<(), Self::Error> {
         let registry = self.registry()?;
+        if let Some(relay) = self.sponsor() {
+            return publish_through(registry, &relay, addr, log);
+        }
         if let Some(payer) = self.payer.lock().expect("payer lock").clone() {
             return Ok(registry.clone().with_payer(payer).publish(addr, log)?);
         }
@@ -380,6 +426,36 @@ impl AccountPublisher for MemoryStore {
     }
 }
 
+/// Hands `log` to `relay` and waits until the chain holds it.
+fn publish_through(
+    registry: &Registry,
+    relay: &RelayTarget,
+    addr: &AccountAddr,
+    log: &SignedAccountLog,
+) -> Result<(), StoreError> {
+    let prepared = registry.prepare_append(addr, log)?;
+    let auth = relay
+        .token
+        .clone()
+        .map_or_else(RelayAuth::default, |token| RelayAuth {
+            kind: "token".into(),
+            payload: token,
+        });
+    let reply = submit_http(&relay.url, &RelayRequest::new(addr, log, auth))
+        .map_err(|error| StoreError::Relay(format!("it could not be reached: {error}")))?;
+    if !reply.accepted {
+        return Err(StoreError::Relay(
+            reply.reason.unwrap_or_else(|| "it refused".into()),
+        ));
+    }
+    match registry.await_append(&prepared, RELAY_WAIT) {
+        Err(LezAccountRegError::Timeout) => Err(StoreError::Relay(
+            "it accepted the update, but the update is not on chain yet".into(),
+        )),
+        landed => Ok(landed?),
+    }
+}
+
 /// The store this app was pointed at. One type rather than a type parameter,
 /// because the choice is made once from the environment and every caller below
 /// would otherwise carry it.
@@ -436,6 +512,20 @@ impl Store {
     pub fn set_submitter(&self, submit: Arc<Submit>) {
         if let Self::Lez(store) = self {
             store.set_submitter(submit);
+        }
+    }
+
+    /// See [`LezStore::set_relay`]. The other stores need no relay.
+    pub fn set_relay(&self, url: &str, token: Option<&str>) {
+        if let Self::Lez(store) = self {
+            store.set_relay(url, token);
+        }
+    }
+
+    /// See [`LezStore::set_sponsored`].
+    pub fn set_sponsored(&self, on: bool) {
+        if let Self::Lez(store) = self {
+            store.set_sponsored(on);
         }
     }
 }
@@ -622,6 +712,54 @@ pub(crate) mod tests {
             self.shards.lock().unwrap().insert(account, log.to_bytes());
         }
 
+        /// Serves an account relay that publishes every submission on this
+        /// registry, or refuses each with `refusal`, and returns its URL.
+        pub(crate) fn relay(&self, refusal: Option<&'static str>) -> String {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap());
+            let registry = self.clone();
+            std::thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let mut reader = BufReader::new(stream.unwrap());
+                    let mut length = 0;
+                    loop {
+                        let mut line = String::new();
+                        reader.read_line(&mut line).unwrap();
+                        let lower = line.to_ascii_lowercase();
+                        if let Some(value) = lower.strip_prefix("content-length:") {
+                            length = value.trim().parse().unwrap();
+                        }
+                        if line == "\r\n" {
+                            break;
+                        }
+                    }
+                    let mut body = vec![0; length];
+                    reader.read_exact(&mut body).unwrap();
+                    let request = RelayRequest::from_bytes(&body).unwrap();
+                    let reply = match refusal {
+                        Some(reason) => json!({ "accepted": false, "reason": reason }),
+                        None => {
+                            let (addr, log) = request.decode().unwrap();
+                            registry.hold(&addr, &log);
+                            json!({ "accepted": true })
+                        }
+                    }
+                    .to_string();
+                    let status = if refusal.is_some() {
+                        "422 Unprocessable Entity"
+                    } else {
+                        "202 Accepted"
+                    };
+                    let response = format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                        reply.len()
+                    );
+                    reader.into_inner().write_all(response.as_bytes()).unwrap();
+                }
+            });
+            url
+        }
+
         /// The program's `apply`: signature, then stored payload, then entries.
         fn submit(&self, request: &str) -> Result<(), String> {
             let request: serde_json::Value = serde_json::from_str(request).unwrap();
@@ -639,6 +777,45 @@ pub(crate) mod tests {
             shards.insert(account, [signature, &payload, entries].concat());
             Ok(())
         }
+    }
+
+    #[test]
+    fn a_sponsored_publish_goes_through_the_relay_not_the_wallet() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay(&fake.relay(None), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        store.publish(&addr, &log).unwrap();
+        assert_eq!(store.fetch(&addr).unwrap(), Some(log));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_relay_refusal_says_why() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay(&fake.relay(Some("the relay is out of funds")), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        let refused = store.publish(&addr, &log).unwrap_err();
+        assert!(matches!(&refused, StoreError::Relay(reason) if reason.contains("out of funds")));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn with_sponsoring_off_the_wallet_pays() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay(&fake.relay(Some("must not be asked")), None);
+        store.set_sponsored(false);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        store.publish(&addr, &log).unwrap();
+        assert_eq!(fake.submitted.lock().unwrap().len(), 1);
     }
 
     #[test]

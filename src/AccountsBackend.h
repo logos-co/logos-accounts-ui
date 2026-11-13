@@ -47,6 +47,7 @@ public:
     void stopObserving(QString address) override;
     void stageAddInstallation(QString keyHex) override;
     void stageSetDisplayName(QString name) override;
+    void useRelay(bool on) override;
     void stageRevoke(int index) override;
     void discardPending() override;
     void publish() override;

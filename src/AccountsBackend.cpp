@@ -107,6 +107,13 @@ AccountsBackend::AccountsBackend()
         m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
                                         utf8(program).constData());
         setStoreUrl(locationPrefix(sequencer) + QStringLiteral(" \u00b7 "));
+        const QByteArray relay = qgetenv("LOGOS_ACCOUNTS_RELAY_URL");
+        if (!relay.isEmpty()) {
+            const QByteArray token = qgetenv("LOGOS_ACCOUNTS_RELAY_TOKEN");
+            logos_account_core_set_relay(m_core, relay.constData(),
+                                         token.isEmpty() ? nullptr : token.constData());
+            setRelayAvailable(true);
+        }
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
         if (payerKey.isEmpty())
             logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
@@ -599,14 +606,22 @@ void AccountsBackend::discardPending()
          [this](const QJsonObject &) { edited(); });
 }
 
+void AccountsBackend::useRelay(bool on)
+{
+    setSponsored(on);
+}
+
 void AccountsBackend::publish()
 {
     const QString address = selectedAddress();
     const QByteArray target = utf8(address);
+    const bool sponsored = relayAvailable() && this->sponsored();
 
-    setStatusText(QStringLiteral("Publishing"));
+    setStatusText(sponsored ? QStringLiteral("Publishing through the relay")
+                            : QStringLiteral("Publishing"));
     call(QStringLiteral("publish"),
-         [target](LogosAccountCore *core) {
+         [target, sponsored](LogosAccountCore *core) {
+             logos_account_core_set_sponsored(core, sponsored);
              return logos_account_core_publish(core, target.constData());
          },
          [this, address](const QJsonObject &reply) {

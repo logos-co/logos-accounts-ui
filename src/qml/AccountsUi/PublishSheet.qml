@@ -21,9 +21,12 @@ Sheet {
                     || (root.store.pending.length > 0 && !root.store.busy
                         && root.store.storeProblem === "")
     cancellable: !root.nothingLeft
-    awaitingText: qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
+    awaitingText: root.sponsoredHere
+                  ? qsTr("Publishing through the relay. A publish cannot be stopped once sent, and the update can take a few minutes to appear.")
+                  : qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
     backend: root.store.backend
 
+    readonly property bool sponsoredHere: root.store.backend.relayAvailable && root.store.backend.sponsored
     readonly property bool nothingLeft: root.store.hasAccount && root.store.pending.length === 0
                                         && !root.store.busy
     // How many entries this device had read as the sheet opened, or -1 when it
@@ -121,6 +124,26 @@ Sheet {
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
         color: Theme.palette.textSecondary
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.store.backend.relayAvailable && !root.nothingLeft
+        spacing: Theme.spacing.small
+
+        LogosCheckbox {
+            objectName: "publishSponsoredBox"
+            text: qsTr("Let the account relay pay the fee")
+            checked: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            onClicked: root.store.backend.useRelay(checked)
+        }
+        HelpText {
+            Layout.fillWidth: true
+            body: root.store.backend.sponsored
+                  ? qsTr("The relay publishes this update and pays for it, so the account needs no funds. If it refuses or is down, untick this and publish with your own funds.")
+                  : qsTr("Your LEZ wallet pays the fee.")
+        }
     }
 
     NoticeBar {

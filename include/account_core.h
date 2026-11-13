@@ -65,6 +65,16 @@ LogosAccountCore *logos_account_core_new_with_chat_store(const char *vault_dir,
 // the key does not parse. Safe on NULL.
 bool logos_account_core_set_payer_key(LogosAccountCore *core, const char *key_hex);
 
+// Have the account relay at `url` publish and pay for registry writes while
+// sponsoring is on, which it is by default; `token`, if not NULL, is sent as
+// its credentials. A relay that refuses or does not publish in time fails the
+// publish with its reason. Safe on NULL.
+void logos_account_core_set_relay(LogosAccountCore *core, const char *url, const char *token);
+
+// Whether the relay pays for registry writes, or the submitter or payer key
+// does. Safe on NULL.
+void logos_account_core_set_sponsored(LogosAccountCore *core, bool on);
+
 // Sends one registry write. Called from the thread a publish runs on, with
 //
 //   {"program":hex,"account":hex,"instruction":hex,"gasLimit":n}
