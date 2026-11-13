@@ -461,14 +461,19 @@ fn publish_through(
             payload: token,
         });
     let request = RelayRequest::new(addr, log, auth);
+    let unreachable =
+        |error: String| StoreError::Relay(format!("it could not be reached: {error}"));
     let reply = match &relay.route {
-        RelayRoute::Http(url) => submit_http(url, &request).map_err(|error| error.to_string()),
-        RelayRoute::Sender(send) => send(&request.to_bytes()).and_then(|bytes| {
-            serde_json::from_slice::<RelayReply>(&bytes)
-                .map_err(|error| format!("it answered something else: {error}"))
-        }),
-    }
-    .map_err(|error| StoreError::Relay(format!("it could not be reached: {error}")))?;
+        RelayRoute::Http(url) => {
+            submit_http(url, &request).map_err(|error| unreachable(error.to_string()))?
+        }
+        RelayRoute::Sender(send) => {
+            let bytes = send(&request.to_bytes()).map_err(unreachable)?;
+            serde_json::from_slice::<RelayReply>(&bytes).map_err(|error| {
+                StoreError::Relay(format!("it answered something else: {error}"))
+            })?
+        }
+    };
     if !reply.accepted {
         return Err(StoreError::Relay(
             reply.reason.unwrap_or_else(|| "it refused".into()),
@@ -476,7 +481,9 @@ fn publish_through(
     }
     match registry.await_append(&prepared, RELAY_WAIT) {
         Err(LezAccountRegError::Timeout) => Err(StoreError::Relay(
-            "it accepted the update, but the update is not on chain yet".into(),
+            "it accepted the update, which is not on chain yet but may still land; wait before \
+             paying with your own funds"
+                .into(),
         )),
         landed => Ok(landed?),
     }

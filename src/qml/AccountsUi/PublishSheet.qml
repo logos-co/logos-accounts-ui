@@ -142,7 +142,7 @@ Sheet {
             Layout.fillWidth: true
             body: root.store.backend.sponsored
                   ? qsTr("The relay publishes this update and pays for it, so the account needs no funds. If it refuses or is down, untick this and publish with your own funds.")
-                  : qsTr("Your LEZ wallet pays the fee.")
+                  : qsTr("Your own funds pay the fee.")
         }
     }
 

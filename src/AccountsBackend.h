@@ -105,6 +105,10 @@ private:
     /// The library's relay sender: hands `request` to this object's thread and
     /// waits for the relay's answer, which stays valid until the next call.
     static const char *relayTrampoline(void *context, const char *request);
+    /// Runs `work` on this object's thread and waits for it, keeping its
+    /// answer in `replyBuffer` until the next call. Gives up once closing.
+    const char *answerOnOwnThread(QByteArray (AccountsBackend::*work)(const QByteArray &),
+                                  const char *request, QByteArray &replyBuffer);
     /// Sends one submission to the relay at `LOGOS_ACCOUNTS_RELAY_PEER` and
     /// `LOGOS_ACCOUNTS_RELAY_ADDR` over the libp2p module. Runs on this
     /// object's thread. Replies as the library's relay sender does.

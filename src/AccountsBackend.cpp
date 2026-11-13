@@ -120,6 +120,9 @@ AccountsBackend::AccountsBackend()
             logos_account_core_set_relay(m_core, relayUrl.constData(), tokenArg);
             setRelayAvailable(true);
         }
+        if (m_relayPeer.isEmpty() != m_relayAddr.isEmpty())
+            qCWarning(lcBackend) << "LOGOS_ACCOUNTS_RELAY_PEER and LOGOS_ACCOUNTS_RELAY_ADDR "
+                                    "must be set together; the libp2p relay is off";
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
         if (payerKey.isEmpty())
             logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
@@ -179,43 +182,34 @@ QString AccountsBackend::configuredRegistryProgram()
 const char *AccountsBackend::submitTrampoline(void *context, const char *request)
 {
     auto *self = static_cast<AccountsBackend *>(context);
-    const QByteArray body(request);
-    auto answer = std::make_shared<std::promise<QByteArray>>();
-    std::future<QByteArray> reply = answer->get_future();
-    QMetaObject::invokeMethod(
-        self, [self, body, answer] { answer->set_value(self->submitToWallet(body)); },
-        Qt::QueuedConnection);
-    while (reply.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
-        if (self->m_closing) {
-            self->m_submitReply = compact({{QStringLiteral("ok"), false},
-                                           {QStringLiteral("error"), QStringLiteral("the app is closing")}})
-                                      .toUtf8();
-            return self->m_submitReply.constData();
-        }
-    }
-    self->m_submitReply = reply.get();
-    return self->m_submitReply.constData();
+    return self->answerOnOwnThread(&AccountsBackend::submitToWallet, request, self->m_submitReply);
 }
 
 const char *AccountsBackend::relayTrampoline(void *context, const char *request)
 {
     auto *self = static_cast<AccountsBackend *>(context);
+    return self->answerOnOwnThread(&AccountsBackend::sendToRelay, request, self->m_relayReply);
+}
+
+const char *AccountsBackend::answerOnOwnThread(QByteArray (AccountsBackend::*work)(const QByteArray &),
+                                               const char *request, QByteArray &replyBuffer)
+{
     const QByteArray body(request);
     auto answer = std::make_shared<std::promise<QByteArray>>();
     std::future<QByteArray> reply = answer->get_future();
     QMetaObject::invokeMethod(
-        self, [self, body, answer] { answer->set_value(self->sendToRelay(body)); },
+        this, [this, work, body, answer] { answer->set_value((this->*work)(body)); },
         Qt::QueuedConnection);
     while (reply.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
-        if (self->m_closing) {
-            self->m_relayReply = compact({{QStringLiteral("ok"), false},
-                                          {QStringLiteral("error"), QStringLiteral("the app is closing")}})
-                                     .toUtf8();
-            return self->m_relayReply.constData();
+        if (m_closing) {
+            replyBuffer = compact({{QStringLiteral("ok"), false},
+                                   {QStringLiteral("error"), QStringLiteral("the app is closing")}})
+                              .toUtf8();
+            return replyBuffer.constData();
         }
     }
-    self->m_relayReply = reply.get();
-    return self->m_relayReply.constData();
+    replyBuffer = reply.get();
+    return replyBuffer.constData();
 }
 
 QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
@@ -238,6 +232,7 @@ QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
     };
     const LogosResult sent = modules().libp2p_module.protocolRequest(compact(args));
     if (!sent.success) {
+        m_libp2pStarted = false;
         const QString error = sent.error.toString();
         return fail(error.isEmpty() ? QStringLiteral("the request did not go through") : error);
     }
