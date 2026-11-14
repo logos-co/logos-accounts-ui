@@ -10,7 +10,7 @@
   "icon": "src/icons/accounts_ui.png",
   "view": "qml/AccountsView.qml",
 
-  "dependencies": ["lez_core"],
+  "dependencies": ["lez_core", "libp2p_module"],
 
   "codegen": {
     "rep": "src/AccountsBackend.rep",

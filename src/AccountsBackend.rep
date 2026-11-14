@@ -25,6 +25,16 @@ class AccountsBackend
 {
     // Where publishing goes: what the store strip puts before the address.
     PROP(QString storeUrl="" READONLY)
+    // The store takes an account relay: the LEZ registry does, chat-store not.
+    PROP(bool relaySupported=false READONLY)
+    // The account relay publishes go through: its libp2p peer id and TCP
+    // multiaddr, both empty when none is set.
+    PROP(QString relayPeer="" READONLY)
+    PROP(QString relayAddress="" READONLY)
+    // An account relay is configured, so publishing can be sponsored.
+    PROP(bool relayAvailable=false READONLY)
+    // The relay pays for the next publish, not the LEZ wallet.
+    PROP(bool sponsored=true READONLY)
     // One line of plain status: what the app is doing, or last did.
     PROP(QString statusText="Starting" READONLY)
     // Why the last read of the store failed; empty once one succeeds.
@@ -93,6 +103,12 @@ class AccountsBackend
     // Sign and send the staged entries as one update, with the key unlocked
     // or stored unsealed.
     SLOT(void publish())
+    // Who pays for the next publish: the relay, or the LEZ wallet.
+    SLOT(void useRelay(bool on))
+    // Publish through the relay at `peer` and `address`, or through none when
+    // both are empty, and remember it. An address ending in /p2p/<peer id>
+    // names the peer too.
+    SLOT(void setRelay(QString peer, QString address))
 
     SLOT(void dismissNotice())
 

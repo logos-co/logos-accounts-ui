@@ -33,7 +33,19 @@ one per address, readable by anyone who holds it. The app reads them from the
 LEZ sequencer (`https://testnet.lez.logos.co` by default) and verifies each one
 before showing it.
 
-A publish is an `Append` transaction, and LEZ charges a fee for it, so the app
+A new account holds no funds yet, so an **account relay** can publish it
+instead. Set one with **Set relay**, on the store strip or in the publish sheet:
+its libp2p peer id and address, reached through the **libp2p** module. The app
+keeps it beside the vault; `LOGOS_ACCOUNTS_RELAY_PEER` and
+`LOGOS_ACCOUNTS_RELAY_ADDR` only fill it in until one is saved, and
+`LOGOS_ACCOUNTS_RELAY_TOKEN` is sent to that relay alone, if it asks for a
+token. The publish
+sheet then offers to let the relay pay the fee, which is on by default; untick
+it to pay with your own funds, for example when the relay refuses or is down.
+See
+[account-registry-lez](https://github.com/logos-messaging/account-registry-lez#account-relay).
+
+Otherwise a publish is an `Append` transaction, and LEZ charges a fee for it, so the app
 sends it through the **LEZ Wallet** module, which must be open. The first
 public wallet account that can cover the fee pays; `LOGOS_ACCOUNTS_LEZ_PAYER`
 names another, by its hex account id. The registry accepts a log only where it extends the one it

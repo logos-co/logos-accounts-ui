@@ -73,6 +73,7 @@ Item {
                                     || publishSheet.visible || unlockSheet.visible
                                     || exportKeySheet.visible || exportedKeySheet.visible
                                     || forgetAccountSheet.visible || observeAccountSheet.visible
+                                    || relaySheet.visible
 
     Connections {
         target: store.backend
@@ -112,7 +113,7 @@ Item {
                 return
             for (const sheet of [addInstallationSheet, displayNameSheet, publishSheet,
                                  unlockSheet, exportKeySheet, forgetAccountSheet,
-                                 observeAccountSheet])
+                                 observeAccountSheet, relaySheet])
                 sheet.close()
         }
     }
@@ -307,6 +308,10 @@ Item {
                     selectedIndex: view.selectedIndex
                     firstNewIndex: store.backend ? store.backend.firstNewIndex : -1
                     onSelected: (index) => view.selectedIndex = index
+                    onRelayRequested: {
+                        relaySheet.open()
+                        relaySheet.reset()
+                    }
                     // Read first, so the preview is of what the store holds now: an
                     // edit another device already wrote drops out of it.
                     onPublishRequested: {
@@ -342,6 +347,17 @@ Item {
     PublishSheet {
         id: publishSheet
         store: store
+        onRelayRequested: {
+            relaySheet.open()
+            relaySheet.reset()
+        }
+    }
+
+    RelaySheet {
+        id: relaySheet
+        store: store
+        // The publish sheet's Set relay button is gone once a relay is set.
+        onVisibleChanged: if (!visible && publishSheet.visible) Qt.callLater(publishSheet.takeFocus)
     }
 
     UnlockSheet {

@@ -23,7 +23,12 @@ Rectangle {
     // while it is doing it.
     property real readAtMs: 0
 
+    // The store takes an account relay, and whether one is set.
+    property bool relaySupported: false
+    property bool relaySet: false
+
     signal retryRequested()
+    signal relayRequested()
 
     id: root
     implicitHeight: 40
@@ -86,6 +91,16 @@ Rectangle {
                 text: root.problem
                 visible: sayHover.hovered && root.problem !== ""
             }
+        }
+
+        LogosButton {
+            objectName: "storeRelayButton"
+            visible: root.relaySupported
+            text: root.relaySet ? qsTr("Relay") : qsTr("Set relay")
+            implicitHeight: 24
+            topPadding: 2
+            bottomPadding: 2
+            onClicked: root.relayRequested()
         }
 
         // Always here: reading the store back is the whole of what can be done

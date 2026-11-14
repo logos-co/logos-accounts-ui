@@ -10,6 +10,8 @@ import Logos.Controls
 Sheet {
     property var store: null
 
+    signal relayRequested()
+
     id: root
     objectName: "publishSheet"
     title: root.nothingLeft ? qsTr("Nothing left to publish")
@@ -21,9 +23,12 @@ Sheet {
                     || (root.store.pending.length > 0 && !root.store.busy
                         && root.store.storeProblem === "")
     cancellable: !root.nothingLeft
-    awaitingText: qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
+    awaitingText: root.sponsoredHere
+                  ? qsTr("Publishing through the relay. A publish cannot be stopped once sent, and the update can take a few minutes to appear.")
+                  : qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
     backend: root.store.backend
 
+    readonly property bool sponsoredHere: root.store.backend.relayAvailable && root.store.backend.sponsored
     readonly property bool nothingLeft: root.store.hasAccount && root.store.pending.length === 0
                                         && !root.store.busy
     // How many entries this device had read as the sheet opened, or -1 when it
@@ -121,6 +126,43 @@ Sheet {
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
         color: Theme.palette.textSecondary
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.store.backend.relayAvailable && !root.nothingLeft
+        spacing: Theme.spacing.small
+
+        LogosCheckbox {
+            objectName: "publishSponsoredBox"
+            text: qsTr("Let the account relay pay the fee")
+            checked: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            onClicked: root.store.backend.useRelay(checked)
+        }
+        HelpText {
+            Layout.fillWidth: true
+            body: root.store.backend.sponsored
+                  ? qsTr("The relay publishes this update and pays for it, so the account needs no funds. If it refuses or is down, untick this and publish with your own funds.")
+                  : qsTr("Your own funds pay the fee.")
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        visible: root.store.backend.relaySupported && !root.store.backend.relayAvailable
+                 && !root.nothingLeft && root.awaiting === ""
+        spacing: Theme.spacing.medium
+
+        HelpText {
+            Layout.fillWidth: true
+            body: qsTr("No account relay is set, so your own funds pay the fee. A relay can publish for an account that has none.")
+        }
+        LogosButton {
+            objectName: "publishSetRelayButton"
+            text: qsTr("Set relay")
+            onClicked: root.relayRequested()
+        }
     }
 
     NoticeBar {

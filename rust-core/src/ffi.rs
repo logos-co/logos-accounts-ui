@@ -107,6 +107,62 @@ pub extern "C" fn logos_account_core_set_payer_key(
     guard.store().set_payer_key(key).is_ok()
 }
 
+/// Carries one relay submission; see `include/account_core.h`.
+pub type RelaySendFn =
+    unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;
+
+/// Have an account relay reached through `send` publish and pay while
+/// sponsoring is on, sending `token`, if not null, as credentials. `send` is
+/// called with `context` from the thread a publish runs on. Safe on null.
+#[no_mangle]
+pub extern "C" fn logos_account_core_set_relay_sender(
+    core: *mut LogosAccountCore,
+    send: Option<RelaySendFn>,
+    context: *mut c_void,
+    token: *const c_char,
+) {
+    let (Some(core), Some(send)) = (unsafe { core.as_ref() }, send) else {
+        return;
+    };
+    let context = SubmitContext(context);
+    let call = move |request: &[u8]| -> Result<Vec<u8>, String> {
+        let request = CString::new(request).map_err(|e| e.to_string())?;
+        let reply = unsafe { send(context.get(), request.as_ptr()) };
+        if reply.is_null() {
+            return Err("no answer".into());
+        }
+        let reply = unsafe { CStr::from_ptr(reply) }
+            .to_string_lossy()
+            .into_owned();
+        let reply: Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+        match (reply["ok"].as_bool(), reply["reply"].as_str()) {
+            (Some(true), Some(answer)) => Ok(answer.as_bytes().to_vec()),
+            _ => Err(reply["error"].as_str().unwrap_or("no answer").to_owned()),
+        }
+    };
+    let guard = core
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard
+        .store()
+        .set_relay_sender(Arc::new(call), str_arg(token));
+}
+
+/// Whether the relay pays for publishes, or the account's own funds do.
+/// Safe on null.
+#[no_mangle]
+pub extern "C" fn logos_account_core_set_sponsored(core: *mut LogosAccountCore, on: bool) {
+    let Some(core) = (unsafe { core.as_ref() }) else {
+        return;
+    };
+    let guard = core
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard.store().set_sponsored(on);
+}
+
 /// Sends one prepared registry write; see `include/account_core.h`.
 pub type SubmitFn =
     unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;
