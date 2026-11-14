@@ -38,7 +38,8 @@ instead. Set one with **Set relay**, on the store strip or in the publish sheet:
 its libp2p peer id and address, reached through the **libp2p** module. The app
 keeps it beside the vault; `LOGOS_ACCOUNTS_RELAY_PEER` and
 `LOGOS_ACCOUNTS_RELAY_ADDR` only fill it in until one is saved, and
-`LOGOS_ACCOUNTS_RELAY_TOKEN` is sent if the relay asks for a token. The publish
+`LOGOS_ACCOUNTS_RELAY_TOKEN` is sent to that relay alone, if it asks for a
+token. The publish
 sheet then offers to let the relay pay the fee, which is on by default; untick
 it to pay with your own funds, for example when the relay refuses or is down.
 See

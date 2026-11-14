@@ -366,6 +366,8 @@ Item {
     RelaySheet {
         id: relaySheet
         store: store
+        // The publish sheet's Set relay button is gone once a relay is set.
+        onVisibleChanged: if (!visible && publishSheet.visible) Qt.callLater(publishSheet.takeFocus)
     }
 
     UnlockSheet {
