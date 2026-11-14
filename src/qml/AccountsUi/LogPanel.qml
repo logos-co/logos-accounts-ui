@@ -14,7 +14,6 @@ Panel {
 
     signal selected(int index)
     signal publishRequested()
-    signal relayRequested()
 
     id: root
     spacing: Theme.spacing.medium
@@ -195,10 +194,7 @@ Panel {
         problem: root.store.storeProblem
         busy: root.store.busy
         readAtMs: root.store.readAtMs
-        relaySupported: root.store.backend.relaySupported
-        relaySet: root.store.backend.relayAvailable
         onRetryRequested: root.store.backend.refresh()
-        onRelayRequested: root.relayRequested()
     }
 
     PendingBar {

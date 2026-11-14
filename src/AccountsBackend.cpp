@@ -91,39 +91,27 @@ bool covers(const QString &balance, quint64 reserve)
         && std::all_of(balance.cbegin(), balance.cend(), [](QChar c) { return c.isDigit(); });
 }
 
-/// Trims a relay's peer id and address and checks them, taking the peer id
-/// from an address that ends in /p2p/<peer id>. Both empty is no relay.
-bool relayInput(QString *peer, QString *address, QString *problem)
+/// Splits a relay's libp2p address, such as
+/// /ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm..., into its peer id and the TCP
+/// address before it, and checks both. An empty address is no relay.
+bool relayInput(const QString &multiaddr, QString *peer, QString *address, QString *problem)
 {
-    static const QRegularExpression suffix(QStringLiteral("/p2p/([1-9A-HJ-NP-Za-km-z]+)$"));
-    static const QRegularExpression peerId(QStringLiteral("^[1-9A-HJ-NP-Za-km-z]{46,64}$"));
-    static const QRegularExpression tcp(
-        QStringLiteral("^/(ip4|ip6|dns|dns4|dns6)/[^/\\s]+/tcp/([0-9]{1,5})$"));
-    *peer = peer->trimmed();
-    *address = address->trimmed();
-    const QRegularExpressionMatch named = suffix.match(*address);
-    if (named.hasMatch()) {
-        if (!peer->isEmpty() && *peer != named.captured(1)) {
-            *problem = QStringLiteral("The address ends in another peer id than the one given.");
-            return false;
-        }
-        *peer = named.captured(1);
-        address->chop(named.capturedLength());
-    }
-    if (peer->isEmpty() && address->isEmpty())
+    static const QRegularExpression shape(QStringLiteral(
+        "^(/(?:ip4|ip6|dns|dns4|dns6)/[^/\\s]+/tcp/([0-9]{1,5}))/p2p/([1-9A-HJ-NP-Za-km-z]{46,64})$"));
+    const QString trimmed = multiaddr.trimmed();
+    peer->clear();
+    address->clear();
+    if (trimmed.isEmpty())
         return true;
-    if (!peerId.match(*peer).hasMatch()) {
-        *problem = QStringLiteral("A peer id is the relay's libp2p identity, 46 or more base58 "
-                                  "characters such as 16Uiu2HAm\u2026");
+    const QRegularExpressionMatch match = shape.match(trimmed);
+    const uint port = match.captured(2).toUInt();
+    if (!match.hasMatch() || port == 0 || port > 65535) {
+        *problem = QStringLiteral("A relay address is a libp2p TCP address ending in the relay's "
+                                  "peer id, such as /ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm\u2026");
         return false;
     }
-    const QRegularExpressionMatch dialable = tcp.match(*address);
-    const uint port = dialable.captured(2).toUInt();
-    if (!dialable.hasMatch() || port == 0 || port > 65535) {
-        *problem = QStringLiteral("An address is a libp2p TCP address, such as "
-                                  "/ip4/203.0.113.7/tcp/9010.");
-        return false;
-    }
+    *address = match.captured(1);
+    *peer = match.captured(3);
     return true;
 }
 
@@ -149,24 +137,22 @@ AccountsBackend::AccountsBackend()
                                             nullptr);
         setRelaySupported(true);
         QSettings settings(settingsPath(), QSettings::IniFormat);
-        QString peer = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_PEER");
-        QString address = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_ADDR");
-        QString tokenPeer = peer;
-        QString tokenAddress = address;
-        QString ignored;
-        if (relayInput(&tokenPeer, &tokenAddress, &ignored) && !tokenPeer.isEmpty()) {
-            m_tokenPeer = tokenPeer;
+        QString chosen = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY");
+        QString peer;
+        QString address;
+        QString problem;
+        if (relayInput(chosen, &peer, &address, &problem) && !peer.isEmpty()) {
+            m_tokenPeer = peer;
             m_token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
         }
-        if (settings.contains(QStringLiteral("relay/peer"))) {
-            peer = settings.value(QStringLiteral("relay/peer")).toString();
-            address = settings.value(QStringLiteral("relay/address")).toString();
-        }
-        QString problem;
-        if (relayInput(&peer, &address, &problem))
-            applyRelay(peer, address);
+        if (settings.contains(QStringLiteral("relay/address")))
+            chosen = settings.value(QStringLiteral("relay/address")).toString();
+        if (relayInput(chosen, &peer, &address, &problem))
+            setRelay(chosen.trimmed());
         else
             qCWarning(lcBackend).noquote() << "the account relay is off:" << problem;
+        setRelayAvailable(!relay().isEmpty());
+        setSponsored(relayAvailable());
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
         if (payerKey.isEmpty())
             logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
@@ -261,19 +247,23 @@ QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
     const auto fail = [](const QString &error) {
         return compact({{QStringLiteral("ok"), false}, {QStringLiteral("error"), error}}).toUtf8();
     };
-    if (relayPeer().isEmpty() || relayAddress().isEmpty())
+    QString peer;
+    QString address;
+    QString problem;
+    if (!relayInput(relay(), &peer, &address, &problem))
+        return fail(problem);
+    if (peer.isEmpty())
         return fail(QStringLiteral("no account relay is set"));
     if (!m_contextReady)
         return fail(QStringLiteral("libp2p is not reachable yet"));
-    QString problem;
     if (!startLibp2p(&problem))
         return fail(problem);
 
     const QJsonObject args{
-        {QStringLiteral("peerId"), relayPeer()},
-        {QStringLiteral("multiaddrs"), QJsonArray{relayAddress()}},
+        {QStringLiteral("peerId"), peer},
+        {QStringLiteral("multiaddrs"), QJsonArray{address}},
         {QStringLiteral("proto"), QStringLiteral("/logos/accounts/relay/1.0.0")},
-        {QStringLiteral("requestB64"), QString::fromLatin1(withToken(request).toBase64())},
+        {QStringLiteral("requestB64"), QString::fromLatin1(withToken(request, peer).toBase64())},
         {QStringLiteral("timeoutMs"), 15000},
     };
     const LogosResult sent = modules().libp2p_module.protocolRequest(compact(args));
@@ -742,40 +732,36 @@ void AccountsBackend::useRelay(bool on)
     setSponsored(on);
 }
 
-void AccountsBackend::setRelay(QString peer, QString address)
+void AccountsBackend::chooseRelay(QString multiaddr)
 {
-    const QString what = QStringLiteral("setRelay");
+    const QString what = QStringLiteral("chooseRelay");
     if (!relaySupported()) {
         report(what, QStringLiteral("This store publishes without a relay."));
         return;
     }
+    QString peer;
+    QString address;
     QString problem;
-    if (!relayInput(&peer, &address, &problem)) {
+    if (!relayInput(multiaddr, &peer, &address, &problem)) {
         report(what, problem);
         return;
     }
+    multiaddr = multiaddr.trimmed();
     QSettings settings(settingsPath(), QSettings::IniFormat);
-    settings.setValue(QStringLiteral("relay/peer"), peer);
-    settings.setValue(QStringLiteral("relay/address"), address);
+    settings.setValue(QStringLiteral("relay/address"), multiaddr);
     settings.sync();
     if (settings.status() != QSettings::NoError) {
         report(what, QStringLiteral("The relay could not be saved to ") + settingsPath());
         return;
     }
-    applyRelay(peer, address);
+    setRelay(multiaddr);
+    setRelayAvailable(!multiaddr.isEmpty());
     emit succeeded(what);
 }
 
-void AccountsBackend::applyRelay(const QString &peer, const QString &address)
+QByteArray AccountsBackend::withToken(const QByteArray &request, const QString &peer) const
 {
-    setRelayPeer(peer);
-    setRelayAddress(address);
-    setRelayAvailable(!peer.isEmpty() && !address.isEmpty());
-}
-
-QByteArray AccountsBackend::withToken(const QByteArray &request) const
-{
-    if (m_token.isEmpty() || relayPeer() != m_tokenPeer)
+    if (m_token.isEmpty() || peer != m_tokenPeer)
         return request;
     QJsonObject submission = QJsonDocument::fromJson(request).object();
     if (submission.isEmpty())

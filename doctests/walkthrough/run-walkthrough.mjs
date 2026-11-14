@@ -16,9 +16,9 @@
 // Env:
 //   APP_PORT   inspector port (default 3768)
 //   OUT_DIR    screenshot output dir (default ./images)
-//   WALKTHROUGH_RELAY_PEER, WALKTHROUGH_RELAY_ADDR
-//              if both are set, the account relay is set through its sheet
-//              before the first publish
+//   WALKTHROUGH_RELAY
+//              if set, a relay address typed into the publish sheet, so the
+//              relay publishes and pays
 import net from "node:net";
 import fs from "node:fs";
 
@@ -206,18 +206,6 @@ async function main() {
   await waitUntil(app, "store.entries.length", 0);
   await shoot(app, outDir, "03-nothing-published-yet.png");
 
-  const relayPeer = process.env.WALKTHROUGH_RELAY_PEER;
-  const relayAddr = process.env.WALKTHROUGH_RELAY_ADDR;
-  if (relayPeer && relayAddr) {
-    console.log("set the account relay...");
-    await click(app, "storeRelayButton");
-    await waitUntil(app, "relaySheet.visible", true);
-    await type(app, "relayPeerField", relayPeer);
-    await type(app, "relayAddressField", relayAddr);
-    await confirm(app, "relaySheet");
-    await waitUntil(app, "store.backend.relayAvailable", true);
-  }
-
   console.log("name the account...");
   await click(app, "displayNameButton");
   await waitUntil(app, "displayNameSheet.visible", true);
@@ -337,6 +325,12 @@ async function main() {
 async function publish(insp) {
   await click(insp, "publishButton");
   await waitUntil(insp, "publishSheet.visible", true);
+  const relay = process.env.WALKTHROUGH_RELAY;
+  if (relay && (await evalq(insp, "store.backend.relay")) !== relay) {
+    if ((await evalq(insp, "store.backend.sponsored")) !== true) await click(insp, "publishSponsoredBox");
+    await waitUntil(insp, "store.backend.sponsored", true);
+    await type(insp, "publishRelayField", relay);
+  }
   await confirm(insp, "publishSheet");
   await waitUntil(insp, "store.pending.length", 0);
 }

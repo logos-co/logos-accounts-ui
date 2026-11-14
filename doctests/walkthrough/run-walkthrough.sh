@@ -101,6 +101,6 @@ echo "launched accounts-ui (inspector $APP_PORT)"
 wait_for_port "$APP_PORT"
 
 OUT_DIR="$OUT_DIR" APP_PORT="$APP_PORT" \
-  WALKTHROUGH_RELAY_PEER="${WALKTHROUGH_RELAY_PEER:-}" WALKTHROUGH_RELAY_ADDR="${WALKTHROUGH_RELAY_ADDR:-}" \
+  WALKTHROUGH_RELAY="${WALKTHROUGH_RELAY:-}" \
   node "$here/run-walkthrough.mjs"
 walkthrough_done=1
