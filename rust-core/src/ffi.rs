@@ -107,24 +107,6 @@ pub extern "C" fn logos_account_core_set_payer_key(
     guard.store().set_payer_key(key).is_ok()
 }
 
-/// Have the account relay at `url` publish and pay while sponsoring is on,
-/// sending `token`, if not null, as credentials. Safe on null.
-#[no_mangle]
-pub extern "C" fn logos_account_core_set_relay(
-    core: *mut LogosAccountCore,
-    url: *const c_char,
-    token: *const c_char,
-) {
-    let (Some(core), Some(url)) = (unsafe { core.as_ref() }, str_arg(url)) else {
-        return;
-    };
-    let guard = core
-        .0
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    guard.store().set_relay(url, str_arg(token));
-}
-
 /// Carries one relay submission; see `include/account_core.h`.
 pub type RelaySendFn =
     unsafe extern "C" fn(context: *mut c_void, request_json: *const c_char) -> *const c_char;

@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
-use account_registry_client::relay::{submit_http, RelayAuth, RelayReply, RelayRequest};
+use account_registry_client::relay::{RelayAuth, RelayReply, RelayRequest};
 use account_registry_client::{
     AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
 };
@@ -104,17 +104,10 @@ struct Submitter(Arc<Mutex<Option<Arc<Submit>>>>);
 /// JSON bytes. Whoever implements this carries them, e.g. over libp2p.
 pub type RelaySend = dyn Fn(&[u8]) -> Result<Vec<u8>, String> + Send + Sync;
 
-/// How submissions reach the relay.
-#[derive(Clone)]
-enum RelayRoute {
-    Http(String),
-    Sender(Arc<RelaySend>),
-}
-
 /// An account relay, which publishes a log and pays its fee.
 #[derive(Clone)]
 struct RelayTarget {
-    route: RelayRoute,
+    send: Arc<RelaySend>,
     token: Option<String>,
 }
 
@@ -175,22 +168,12 @@ impl LezStore {
         Ok(())
     }
 
-    /// Have the relay at `url` publish and pay, while sponsoring is on.
-    /// `token`, if any, is sent as `token` credentials.
-    pub fn set_relay(&self, url: &str, token: Option<&str>) {
-        let url = url.trim();
-        let route = (!url.is_empty()).then(|| RelayRoute::Http(url.to_owned()));
-        self.route_relay(route, token);
-    }
-
-    /// Like [`Self::set_relay`], with `send` carrying each submission.
+    /// Have a relay publish and pay while sponsoring is on, with `send`
+    /// carrying each submission to it. `token`, if any, is sent as `token`
+    /// credentials.
     pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
-        self.route_relay(Some(RelayRoute::Sender(send)), token);
-    }
-
-    fn route_relay(&self, route: Option<RelayRoute>, token: Option<&str>) {
         let token = token.map(str::to_owned).filter(|token| !token.is_empty());
-        *self.relay.lock().expect("relay lock") = route.map(|route| RelayTarget { route, token });
+        *self.relay.lock().expect("relay lock") = Some(RelayTarget { send, token });
     }
 
     /// Whether a relay pays for publishes. Off, or with no relay set, the
@@ -463,17 +446,9 @@ fn publish_through(
     let request = RelayRequest::new(addr, log, auth);
     let unreachable =
         |error: String| StoreError::Relay(format!("it could not be reached: {error}"));
-    let reply = match &relay.route {
-        RelayRoute::Http(url) => {
-            submit_http(url, &request).map_err(|error| unreachable(error.to_string()))?
-        }
-        RelayRoute::Sender(send) => {
-            let bytes = send(&request.to_bytes()).map_err(unreachable)?;
-            serde_json::from_slice::<RelayReply>(&bytes).map_err(|error| {
-                StoreError::Relay(format!("it answered something else: {error}"))
-            })?
-        }
-    };
+    let bytes = (relay.send)(&request.to_bytes()).map_err(unreachable)?;
+    let reply = serde_json::from_slice::<RelayReply>(&bytes)
+        .map_err(|error| StoreError::Relay(format!("it answered something else: {error}")))?;
     if !reply.accepted {
         return Err(StoreError::Relay(
             reply.reason.unwrap_or_else(|| "it refused".into()),
@@ -553,14 +528,7 @@ impl Store {
         }
     }
 
-    /// See [`LezStore::set_relay`]. The other stores need no relay.
-    pub fn set_relay(&self, url: &str, token: Option<&str>) {
-        if let Self::Lez(store) = self {
-            store.set_relay(url, token);
-        }
-    }
-
-    /// See [`LezStore::set_relay_sender`].
+    /// See [`LezStore::set_relay_sender`]. The other stores need no relay.
     pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
         if let Self::Lez(store) = self {
             store.set_relay_sender(send, token);
@@ -757,52 +725,22 @@ pub(crate) mod tests {
             self.shards.lock().unwrap().insert(account, log.to_bytes());
         }
 
-        /// Serves an account relay that publishes every submission on this
-        /// registry, or refuses each with `refusal`, and returns its URL.
-        pub(crate) fn relay(&self, refusal: Option<&'static str>) -> String {
-            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let url = format!("http://{}", listener.local_addr().unwrap());
+        /// An account relay that publishes every submission on this
+        /// registry, or refuses each with `refusal`.
+        pub(crate) fn relay(&self, refusal: Option<&'static str>) -> Arc<RelaySend> {
             let registry = self.clone();
-            std::thread::spawn(move || {
-                for stream in listener.incoming() {
-                    let mut reader = BufReader::new(stream.unwrap());
-                    let mut length = 0;
-                    loop {
-                        let mut line = String::new();
-                        reader.read_line(&mut line).unwrap();
-                        let lower = line.to_ascii_lowercase();
-                        if let Some(value) = lower.strip_prefix("content-length:") {
-                            length = value.trim().parse().unwrap();
-                        }
-                        if line == "\r\n" {
-                            break;
-                        }
+            Arc::new(move |bytes: &[u8]| {
+                let request = RelayRequest::from_bytes(bytes).unwrap();
+                let reply = match refusal {
+                    Some(reason) => json!({ "accepted": false, "reason": reason }),
+                    None => {
+                        let (addr, log) = request.decode().unwrap();
+                        registry.hold(&addr, &log);
+                        json!({ "accepted": true })
                     }
-                    let mut body = vec![0; length];
-                    reader.read_exact(&mut body).unwrap();
-                    let request = RelayRequest::from_bytes(&body).unwrap();
-                    let reply = match refusal {
-                        Some(reason) => json!({ "accepted": false, "reason": reason }),
-                        None => {
-                            let (addr, log) = request.decode().unwrap();
-                            registry.hold(&addr, &log);
-                            json!({ "accepted": true })
-                        }
-                    }
-                    .to_string();
-                    let status = if refusal.is_some() {
-                        "422 Unprocessable Entity"
-                    } else {
-                        "202 Accepted"
-                    };
-                    let response = format!(
-                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
-                        reply.len()
-                    );
-                    reader.into_inner().write_all(response.as_bytes()).unwrap();
-                }
-            });
-            url
+                };
+                Ok(reply.to_string().into_bytes())
+            })
         }
 
         /// The program's `apply`: signature, then stored payload, then entries.
@@ -828,28 +766,7 @@ pub(crate) mod tests {
     fn a_sponsored_publish_goes_through_the_relay_not_the_wallet() {
         let fake = FakeRegistry::default();
         let mut store = fake.store();
-        store.set_relay(&fake.relay(None), None);
-        let key = Ed25519SigningKey::generate();
-        let (addr, log) = signed(&key, &["saro"]);
-
-        store.publish(&addr, &log).unwrap();
-        assert_eq!(store.fetch(&addr).unwrap(), Some(log));
-        assert!(fake.submitted.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn a_relay_reached_through_a_sender_publishes_too() {
-        let fake = FakeRegistry::default();
-        let mut store = fake.store();
-        let registry = fake.clone();
-        store.set_relay_sender(
-            Arc::new(move |bytes: &[u8]| {
-                let (addr, log) = RelayRequest::from_bytes(bytes).unwrap().decode().unwrap();
-                registry.hold(&addr, &log);
-                Ok(br#"{"accepted":true}"#.to_vec())
-            }),
-            None,
-        );
+        store.set_relay_sender(fake.relay(None), None);
         let key = Ed25519SigningKey::generate();
         let (addr, log) = signed(&key, &["saro"]);
 
@@ -862,7 +779,7 @@ pub(crate) mod tests {
     fn a_relay_refusal_says_why() {
         let fake = FakeRegistry::default();
         let mut store = fake.store();
-        store.set_relay(&fake.relay(Some("the relay is out of funds")), None);
+        store.set_relay_sender(fake.relay(Some("the relay is out of funds")), None);
         let key = Ed25519SigningKey::generate();
         let (addr, log) = signed(&key, &["saro"]);
 
@@ -875,7 +792,7 @@ pub(crate) mod tests {
     fn with_sponsoring_off_the_wallet_pays() {
         let fake = FakeRegistry::default();
         let mut store = fake.store();
-        store.set_relay(&fake.relay(Some("must not be asked")), None);
+        store.set_relay_sender(fake.relay(Some("must not be asked")), None);
         store.set_sponsored(false);
         let key = Ed25519SigningKey::generate();
         let (addr, log) = signed(&key, &["saro"]);

@@ -35,9 +35,8 @@ before showing it.
 
 A new account holds no funds yet, so an **account relay** can publish it
 instead: set `LOGOS_ACCOUNTS_RELAY_PEER` and `LOGOS_ACCOUNTS_RELAY_ADDR` to its
-libp2p peer id and address, reached through the **libp2p** module, or
-`LOGOS_ACCOUNTS_RELAY_URL` to its HTTP endpoint; and `LOGOS_ACCOUNTS_RELAY_TOKEN`
-if it asks for a token. The publish sheet then offers to let the relay pay the
+libp2p peer id and address, reached through the **libp2p** module, and
+`LOGOS_ACCOUNTS_RELAY_TOKEN` if it asks for a token. The publish sheet then offers to let the relay pay the
 fee, which is on by default; untick it to pay with your own funds, for example
 when the relay refuses or is down. See
 [account-registry-lez](https://github.com/logos-messaging/account-registry-lez#account-relay).

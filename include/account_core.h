@@ -65,12 +65,6 @@ LogosAccountCore *logos_account_core_new_with_chat_store(const char *vault_dir,
 // the key does not parse. Safe on NULL.
 bool logos_account_core_set_payer_key(LogosAccountCore *core, const char *key_hex);
 
-// Have the account relay at `url` publish and pay for registry writes while
-// sponsoring is on, which it is by default; `token`, if not NULL, is sent as
-// its credentials. A relay that refuses or does not publish in time fails the
-// publish with its reason. Safe on NULL.
-void logos_account_core_set_relay(LogosAccountCore *core, const char *url, const char *token);
-
 // Carries one relay submission, a JSON object, to the relay and returns
 //
 //   {"ok":true,"reply":"<the relay's reply, a JSON object, as a string>"}
@@ -80,8 +74,11 @@ void logos_account_core_set_relay(LogosAccountCore *core, const char *url, const
 // until the next call.
 typedef const char *(*logos_account_core_relay_fn)(void *context, const char *request_json);
 
-// Like logos_account_core_set_relay, with `send` carrying each submission, e.g.
-// over libp2p. Safe on NULL.
+// Have an account relay publish and pay for registry writes while sponsoring is
+// on, which it is by default, with `send` carrying each submission to it, e.g.
+// over libp2p. `token`, if not NULL, is sent as its credentials. A relay that
+// refuses or does not publish in time fails the publish with its reason. Safe
+// on NULL.
 void logos_account_core_set_relay_sender(LogosAccountCore *core, logos_account_core_relay_fn send,
                                          void *context, const char *token);
 

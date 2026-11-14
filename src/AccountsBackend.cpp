@@ -111,13 +111,9 @@ AccountsBackend::AccountsBackend()
         const char *tokenArg = token.isEmpty() ? nullptr : token.constData();
         m_relayPeer = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_PEER");
         m_relayAddr = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_ADDR");
-        const QByteArray relayUrl = qgetenv("LOGOS_ACCOUNTS_RELAY_URL").trimmed();
         if (!m_relayPeer.isEmpty() && !m_relayAddr.isEmpty()) {
             logos_account_core_set_relay_sender(m_core, &AccountsBackend::relayTrampoline, this,
                                                 tokenArg);
-            setRelayAvailable(true);
-        } else if (!relayUrl.isEmpty()) {
-            logos_account_core_set_relay(m_core, relayUrl.constData(), tokenArg);
             setRelayAvailable(true);
         }
         if (m_relayPeer.isEmpty() != m_relayAddr.isEmpty())
