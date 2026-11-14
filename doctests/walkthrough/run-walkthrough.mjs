@@ -16,6 +16,9 @@
 // Env:
 //   APP_PORT   inspector port (default 3768)
 //   OUT_DIR    screenshot output dir (default ./images)
+//   WALKTHROUGH_RELAY_PEER, WALKTHROUGH_RELAY_ADDR
+//              if both are set, the account relay is set through its sheet
+//              before the first publish
 import net from "node:net";
 import fs from "node:fs";
 
@@ -202,6 +205,18 @@ async function main() {
   await waitUntil(app, "store.published", false);
   await waitUntil(app, "store.entries.length", 0);
   await shoot(app, outDir, "03-nothing-published-yet.png");
+
+  const relayPeer = process.env.WALKTHROUGH_RELAY_PEER;
+  const relayAddr = process.env.WALKTHROUGH_RELAY_ADDR;
+  if (relayPeer && relayAddr) {
+    console.log("set the account relay...");
+    await click(app, "storeRelayButton");
+    await waitUntil(app, "relaySheet.visible", true);
+    await type(app, "relayPeerField", relayPeer);
+    await type(app, "relayAddressField", relayAddr);
+    await confirm(app, "relaySheet");
+    await waitUntil(app, "store.backend.relayAvailable", true);
+  }
 
   console.log("name the account...");
   await click(app, "displayNameButton");

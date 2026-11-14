@@ -48,6 +48,7 @@ public:
     void stageAddInstallation(QString keyHex) override;
     void stageSetDisplayName(QString name) override;
     void useRelay(bool on) override;
+    void setRelay(QString peer, QString address) override;
     void stageRevoke(int index) override;
     void discardPending() override;
     void publish() override;
@@ -109,10 +110,14 @@ private:
     /// answer in `replyBuffer` until the next call. Gives up once closing.
     const char *answerOnOwnThread(QByteArray (AccountsBackend::*work)(const QByteArray &),
                                   const char *request, QByteArray &replyBuffer);
-    /// Sends one submission to the relay at `LOGOS_ACCOUNTS_RELAY_PEER` and
-    /// `LOGOS_ACCOUNTS_RELAY_ADDR` over the libp2p module. Runs on this
+    /// Sends one submission to the relay at `relayPeer` and `relayAddress`
+    /// over the libp2p module. Runs on this
     /// object's thread. Replies as the library's relay sender does.
     QByteArray sendToRelay(const QByteArray &request);
+    /// Where the relay chosen in the app is kept: beside the vault, not in it.
+    static QString settingsPath();
+    /// Points publishing at the relay `peer` at `address`, or at none.
+    void applyRelay(const QString &peer, const QString &address);
     /// Makes sure the libp2p module runs a node, or says why not.
     bool startLibp2p(QString *problem);
 

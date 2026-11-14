@@ -10,6 +10,8 @@ import Logos.Controls
 Sheet {
     property var store: null
 
+    signal relayRequested()
+
     id: root
     objectName: "publishSheet"
     title: root.nothingLeft ? qsTr("Nothing left to publish")
@@ -143,6 +145,23 @@ Sheet {
             body: root.store.backend.sponsored
                   ? qsTr("The relay publishes this update and pays for it, so the account needs no funds. If it refuses or is down, untick this and publish with your own funds.")
                   : qsTr("Your own funds pay the fee.")
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        visible: root.store.backend.relaySupported && !root.store.backend.relayAvailable
+                 && !root.nothingLeft && root.awaiting === ""
+        spacing: Theme.spacing.medium
+
+        HelpText {
+            Layout.fillWidth: true
+            body: qsTr("No account relay is set, so your own funds pay the fee. A relay can publish for an account that has none.")
+        }
+        LogosButton {
+            objectName: "publishSetRelayButton"
+            text: qsTr("Set relay")
+            onClicked: root.relayRequested()
         }
     }
 
