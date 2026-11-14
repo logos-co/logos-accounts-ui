@@ -18,7 +18,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
@@ -42,6 +43,9 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a sponsored publish waits for the relay's write to land. Testnet
 /// makes about one block a minute.
 const RELAY_WAIT: Duration = Duration::from_secs(180);
+
+/// How long a sponsored publish waits after the sequencer failed to answer.
+const RELAY_RETRY: Duration = Duration::from_secs(2);
 
 /// The largest artifact chat-store can answer with: the format's payload cap
 /// plus the signature in front of it.
@@ -454,18 +458,29 @@ fn publish_through(
             reply.reason.unwrap_or_else(|| "it refused".into()),
         ));
     }
-    match registry.await_append(&prepared, RELAY_WAIT) {
-        Err(
-            LezAccountRegError::Timeout
-            | LezAccountRegError::Transport(_)
-            | LezAccountRegError::Rpc { .. }
-            | LezAccountRegError::Response(_),
-        ) => Err(StoreError::Relay(
-            "it accepted the update, which is not on chain yet but may still land; wait before \
-             paying with your own funds"
-                .into(),
-        )),
-        landed => Ok(landed?),
+    let deadline = Instant::now() + RELAY_WAIT;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match registry.await_append(&prepared, left) {
+            Err(
+                LezAccountRegError::Transport(_)
+                | LezAccountRegError::Rpc { .. }
+                | LezAccountRegError::Response(_),
+            ) if !left.is_zero() => thread::sleep(RELAY_RETRY.min(left)),
+            Err(
+                LezAccountRegError::Timeout
+                | LezAccountRegError::Transport(_)
+                | LezAccountRegError::Rpc { .. }
+                | LezAccountRegError::Response(_),
+            ) => {
+                return Err(StoreError::Relay(
+                    "it accepted the update, which is not on chain yet but may still land; wait \
+                     before paying with your own funds"
+                        .into(),
+                ))
+            }
+            landed => return Ok(landed?),
+        }
     }
 }
 
@@ -786,6 +801,20 @@ pub(crate) mod tests {
         let refused = store.publish(&addr, &log).unwrap_err();
         assert!(matches!(&refused, StoreError::Relay(reason) if reason.contains("out of funds")));
         assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unreachable_relay_fails_the_publish() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay_sender(Arc::new(|_: &[u8]| Err("dial failed".to_owned())), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        let failed = store.publish(&addr, &log).unwrap_err();
+        assert!(matches!(&failed, StoreError::Relay(reason) if reason.contains("dial failed")));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+        assert_eq!(store.fetch(&addr).unwrap(), None);
     }
 
     #[test]

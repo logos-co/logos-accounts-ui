@@ -239,12 +239,10 @@ QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
 
 bool AccountsBackend::startLibp2p(QString *problem)
 {
-    if (m_libp2pStarted)
-        return true;
-    // Another module may have made the node first; it then serves us too.
-    const auto tolerated = [](const LogosResult &result) {
-        return result.success || result.error.toString().contains(QStringLiteral("already"));
-    };
+    if (m_libp2pStarted) {
+        *problem = m_libp2pProblem;
+        return m_libp2pProblem.isEmpty();
+    }
     const QJsonObject config{
         {QStringLiteral("addrs"), QJsonArray{QStringLiteral("/ip4/127.0.0.1/tcp/0")}},
         {QStringLiteral("transport"), QStringLiteral("tcp")},
@@ -254,15 +252,21 @@ bool AccountsBackend::startLibp2p(QString *problem)
         {QStringLiteral("mountServiceDiscovery"), false},
     };
     const LogosResult created = modules().libp2p_module.createNode(compact(config));
-    if (!tolerated(created)) {
+    // Another module made the node first, and runs it for us too.
+    if (!created.success && created.error.toString().contains(QStringLiteral("already"))) {
+        m_libp2pStarted = true;
+        return true;
+    }
+    if (!created.success) {
         *problem = QStringLiteral("libp2p did not start: ") + created.error.toString();
         return false;
     }
     // A second start while one still runs crashes libp2p_module.
     m_libp2pStarted = true;
     const LogosResult started = modules().libp2p_module.start();
-    if (!tolerated(started)) {
-        *problem = QStringLiteral("libp2p did not start: ") + started.error.toString();
+    if (!started.success) {
+        m_libp2pProblem = QStringLiteral("libp2p did not start: ") + started.error.toString();
+        *problem = m_libp2pProblem;
         return false;
     }
     return true;

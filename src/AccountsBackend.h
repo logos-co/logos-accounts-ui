@@ -142,4 +142,6 @@ private:
     QString m_relayAddr;
     QByteArray m_relayReply;
     bool m_libp2pStarted = false;
+    /// Why the one start libp2p gets failed, if it did.
+    QString m_libp2pProblem;
 };
