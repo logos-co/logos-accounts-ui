@@ -16,11 +16,14 @@
 //! alternative. A log crosses it as the artifact the account-log crate
 //! transmits, `signature || payload`, in both directions.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
+use account_registry_client::relay::{RelayAuth, RelayReply, RelayRequest};
 use account_registry_client::{
     AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
 };
@@ -36,6 +39,13 @@ pub const DEFAULT_SEQUENCER_URL: &str = "https://testnet.lez.logos.co";
 pub const DEFAULT_REGISTRY_PROGRAM: &str = "BHNNfnhPMNMZ7N3oAtbu1iM1HkFyraWx2UjBvxhj8wTa";
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How long a sponsored publish waits for the relay's write to land. Testnet
+/// makes about one block a minute.
+const RELAY_WAIT: Duration = Duration::from_secs(180);
+
+/// How long a sponsored publish waits after the sequencer failed to answer.
+const RELAY_RETRY: Duration = Duration::from_secs(2);
 
 /// The largest artifact chat-store can answer with: the format's payload cap
 /// plus the signature in front of it.
@@ -59,6 +69,8 @@ pub enum StoreError {
     NotConfigured(String),
     #[error("the LEZ wallet did not send the update: {0}")]
     Wallet(String),
+    #[error("the relay did not publish the update: {0}")]
+    Relay(String),
 }
 
 impl From<LezAccountRegError> for StoreError {
@@ -92,6 +104,17 @@ pub type Submit = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 #[derive(Clone, Default)]
 struct Submitter(Arc<Mutex<Option<Arc<Submit>>>>);
 
+/// Sends one submission to an account relay and returns its reply, both as
+/// JSON bytes. Whoever implements this carries them, e.g. over libp2p.
+pub type RelaySend = dyn Fn(&[u8]) -> Result<Vec<u8>, String> + Send + Sync;
+
+/// An account relay, which publishes a log and pays its fee.
+#[derive(Clone)]
+struct RelayTarget {
+    send: Arc<RelaySend>,
+    token: Option<String>,
+}
+
 /// The account registry on a LEZ sequencer.
 #[derive(Clone)]
 pub struct LezStore {
@@ -99,6 +122,8 @@ pub struct LezStore {
     registry: Result<Registry, Arc<str>>,
     submitter: Submitter,
     payer: Arc<Mutex<Option<PrivateKey>>>,
+    relay: Arc<Mutex<Option<RelayTarget>>>,
+    sponsored: Arc<AtomicBool>,
 }
 
 impl LezStore {
@@ -119,6 +144,8 @@ impl LezStore {
             registry,
             submitter: Submitter::default(),
             payer: Arc::default(),
+            relay: Arc::default(),
+            sponsored: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -143,6 +170,28 @@ impl LezStore {
             .map_err(|_| StoreError::NotConfigured("the payer key is not a LEE key".into()))?;
         *self.payer.lock().expect("payer lock") = Some(key);
         Ok(())
+    }
+
+    /// Have a relay publish and pay while sponsoring is on, with `send`
+    /// carrying each submission to it. `token`, if any, is sent as `token`
+    /// credentials.
+    pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
+        let token = token.map(str::to_owned).filter(|token| !token.is_empty());
+        *self.relay.lock().expect("relay lock") = Some(RelayTarget { send, token });
+    }
+
+    /// Whether a relay pays for publishes. Off, or with no relay set, the
+    /// account's own funds do.
+    pub fn set_sponsored(&self, on: bool) {
+        self.sponsored.store(on, Ordering::SeqCst);
+    }
+
+    /// The relay that pays for the next publish, if any.
+    fn sponsor(&self) -> Option<RelayTarget> {
+        if !self.sponsored.load(Ordering::SeqCst) {
+            return None;
+        }
+        self.relay.lock().expect("relay lock").clone()
     }
 
     fn registry(&self) -> Result<&Registry, StoreError> {
@@ -177,6 +226,9 @@ impl AccountPublisher for LezStore {
     /// it, and waits until the chain holds `log`.
     fn publish(&mut self, addr: &AccountAddr, log: &SignedAccountLog) -> Result<(), Self::Error> {
         let registry = self.registry()?;
+        if let Some(relay) = self.sponsor() {
+            return publish_through(registry, &relay, addr, log);
+        }
         if let Some(payer) = self.payer.lock().expect("payer lock").clone() {
             return Ok(registry.clone().with_payer(payer).publish(addr, log)?);
         }
@@ -380,6 +432,58 @@ impl AccountPublisher for MemoryStore {
     }
 }
 
+/// Hands `log` to `relay` and waits until the chain holds it.
+fn publish_through(
+    registry: &Registry,
+    relay: &RelayTarget,
+    addr: &AccountAddr,
+    log: &SignedAccountLog,
+) -> Result<(), StoreError> {
+    let prepared = registry.prepare_append(addr, log)?;
+    let auth = relay
+        .token
+        .clone()
+        .map_or_else(RelayAuth::default, |token| RelayAuth {
+            kind: "token".into(),
+            payload: token,
+        });
+    let request = RelayRequest::new(addr, log, auth);
+    let unreachable =
+        |error: String| StoreError::Relay(format!("it could not be reached: {error}"));
+    let bytes = (relay.send)(&request.to_bytes()).map_err(unreachable)?;
+    let reply = serde_json::from_slice::<RelayReply>(&bytes)
+        .map_err(|error| StoreError::Relay(format!("it answered something else: {error}")))?;
+    if !reply.accepted {
+        return Err(StoreError::Relay(
+            reply.reason.unwrap_or_else(|| "it refused".into()),
+        ));
+    }
+    let deadline = Instant::now() + RELAY_WAIT;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match registry.await_append(&prepared, left) {
+            Err(
+                LezAccountRegError::Transport(_)
+                | LezAccountRegError::Rpc { .. }
+                | LezAccountRegError::Response(_),
+            ) if !left.is_zero() => thread::sleep(RELAY_RETRY.min(left)),
+            Err(
+                LezAccountRegError::Timeout
+                | LezAccountRegError::Transport(_)
+                | LezAccountRegError::Rpc { .. }
+                | LezAccountRegError::Response(_),
+            ) => {
+                return Err(StoreError::Relay(
+                    "it accepted the update, which is not on chain yet but may still land; wait \
+                     before paying with your own funds"
+                        .into(),
+                ))
+            }
+            landed => return Ok(landed?),
+        }
+    }
+}
+
 /// The store this app was pointed at. One type rather than a type parameter,
 /// because the choice is made once from the environment and every caller below
 /// would otherwise carry it.
@@ -436,6 +540,20 @@ impl Store {
     pub fn set_submitter(&self, submit: Arc<Submit>) {
         if let Self::Lez(store) = self {
             store.set_submitter(submit);
+        }
+    }
+
+    /// See [`LezStore::set_relay_sender`]. The other stores need no relay.
+    pub fn set_relay_sender(&self, send: Arc<RelaySend>, token: Option<&str>) {
+        if let Self::Lez(store) = self {
+            store.set_relay_sender(send, token);
+        }
+    }
+
+    /// See [`LezStore::set_sponsored`].
+    pub fn set_sponsored(&self, on: bool) {
+        if let Self::Lez(store) = self {
+            store.set_sponsored(on);
         }
     }
 }
@@ -622,6 +740,24 @@ pub(crate) mod tests {
             self.shards.lock().unwrap().insert(account, log.to_bytes());
         }
 
+        /// An account relay that publishes every submission on this
+        /// registry, or refuses each with `refusal`.
+        pub(crate) fn relay(&self, refusal: Option<&'static str>) -> Arc<RelaySend> {
+            let registry = self.clone();
+            Arc::new(move |bytes: &[u8]| {
+                let request = RelayRequest::from_bytes(bytes).unwrap();
+                let reply = match refusal {
+                    Some(reason) => json!({ "accepted": false, "reason": reason }),
+                    None => {
+                        let (addr, log) = request.decode().unwrap();
+                        registry.hold(&addr, &log);
+                        json!({ "accepted": true })
+                    }
+                };
+                Ok(reply.to_string().into_bytes())
+            })
+        }
+
         /// The program's `apply`: signature, then stored payload, then entries.
         fn submit(&self, request: &str) -> Result<(), String> {
             let request: serde_json::Value = serde_json::from_str(request).unwrap();
@@ -639,6 +775,59 @@ pub(crate) mod tests {
             shards.insert(account, [signature, &payload, entries].concat());
             Ok(())
         }
+    }
+
+    #[test]
+    fn a_sponsored_publish_goes_through_the_relay_not_the_wallet() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay_sender(fake.relay(None), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        store.publish(&addr, &log).unwrap();
+        assert_eq!(store.fetch(&addr).unwrap(), Some(log));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_relay_refusal_says_why() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay_sender(fake.relay(Some("the relay is out of funds")), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        let refused = store.publish(&addr, &log).unwrap_err();
+        assert!(matches!(&refused, StoreError::Relay(reason) if reason.contains("out of funds")));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unreachable_relay_fails_the_publish() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay_sender(Arc::new(|_: &[u8]| Err("dial failed".to_owned())), None);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        let failed = store.publish(&addr, &log).unwrap_err();
+        assert!(matches!(&failed, StoreError::Relay(reason) if reason.contains("dial failed")));
+        assert!(fake.submitted.lock().unwrap().is_empty());
+        assert_eq!(store.fetch(&addr).unwrap(), None);
+    }
+
+    #[test]
+    fn with_sponsoring_off_the_wallet_pays() {
+        let fake = FakeRegistry::default();
+        let mut store = fake.store();
+        store.set_relay_sender(fake.relay(Some("must not be asked")), None);
+        store.set_sponsored(false);
+        let key = Ed25519SigningKey::generate();
+        let (addr, log) = signed(&key, &["saro"]);
+
+        store.publish(&addr, &log).unwrap();
+        assert_eq!(fake.submitted.lock().unwrap().len(), 1);
     }
 
     #[test]

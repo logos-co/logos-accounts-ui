@@ -100,5 +100,7 @@ QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
 echo "launched accounts-ui (inspector $APP_PORT)"
 wait_for_port "$APP_PORT"
 
-OUT_DIR="$OUT_DIR" APP_PORT="$APP_PORT" node "$here/run-walkthrough.mjs"
+OUT_DIR="$OUT_DIR" APP_PORT="$APP_PORT" \
+  WALKTHROUGH_RELAY="${WALKTHROUGH_RELAY:-}" WALKTHROUGH_RELAY_TOKEN="${WALKTHROUGH_RELAY_TOKEN:-}" \
+  node "$here/run-walkthrough.mjs"
 walkthrough_done=1

@@ -1,10 +1,13 @@
 #include "AccountsBackend.h"
 
 #include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLoggingCategory>
 #include <QMetaObject>
+#include <QRegularExpression>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTime>
 #include <QtGlobal>
@@ -89,6 +92,30 @@ bool covers(const QString &balance, quint64 reserve)
         && std::all_of(balance.cbegin(), balance.cend(), [](QChar c) { return c.isDigit(); });
 }
 
+/// Splits a relay's libp2p address, such as
+/// /ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm..., into its peer id and the TCP
+/// address before it, and checks both. An empty address is no relay.
+bool relayInput(const QString &multiaddr, QString *peer, QString *address, QString *problem)
+{
+    static const QRegularExpression shape(QStringLiteral(
+        "^(/(?:ip4|ip6|dns|dns4|dns6)/[^/\\s]+/tcp/([0-9]{1,5}))/p2p/([1-9A-HJ-NP-Za-km-z]{46,64})$"));
+    const QString trimmed = multiaddr.trimmed();
+    peer->clear();
+    address->clear();
+    if (trimmed.isEmpty())
+        return true;
+    const QRegularExpressionMatch match = shape.match(trimmed);
+    const uint port = match.captured(2).toUInt();
+    if (!match.hasMatch() || port == 0 || port > 65535) {
+        *problem = QStringLiteral("A relay address is a libp2p TCP address ending in the relay's "
+                                  "peer id, such as /ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm\u2026");
+        return false;
+    }
+    *address = match.captured(1);
+    *peer = match.captured(3);
+    return true;
+}
+
 } // namespace
 
 AccountsBackend::AccountsBackend()
@@ -107,6 +134,27 @@ AccountsBackend::AccountsBackend()
         m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
                                         utf8(program).constData());
         setStoreUrl(locationPrefix(sequencer) + QStringLiteral(" \u00b7 "));
+        logos_account_core_set_relay_sender(m_core, &AccountsBackend::relayTrampoline, this,
+                                            nullptr);
+        setRelaySupported(true);
+        QSettings settings(settingsPath(), QSettings::IniFormat);
+        QString chosen = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY");
+        QString token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
+        if (settings.contains(QStringLiteral("relay/address"))) {
+            chosen = settings.value(QStringLiteral("relay/address")).toString();
+            token = settings.value(QStringLiteral("relay/token")).toString();
+        }
+        QString peer;
+        QString address;
+        QString problem;
+        if (relayInput(chosen, &peer, &address, &problem)) {
+            setRelay(chosen.trimmed());
+            setRelayToken(peer.isEmpty() ? QString() : token.trimmed());
+        } else {
+            qCWarning(lcBackend).noquote() << "the account relay is off:" << problem;
+        }
+        setRelayAvailable(!relay().isEmpty());
+        setSponsored(relayAvailable());
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
         if (payerKey.isEmpty())
             logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
@@ -166,22 +214,104 @@ QString AccountsBackend::configuredRegistryProgram()
 const char *AccountsBackend::submitTrampoline(void *context, const char *request)
 {
     auto *self = static_cast<AccountsBackend *>(context);
+    return self->answerOnOwnThread(&AccountsBackend::submitToWallet, request, self->m_submitReply);
+}
+
+const char *AccountsBackend::relayTrampoline(void *context, const char *request)
+{
+    auto *self = static_cast<AccountsBackend *>(context);
+    return self->answerOnOwnThread(&AccountsBackend::sendToRelay, request, self->m_relayReply);
+}
+
+const char *AccountsBackend::answerOnOwnThread(QByteArray (AccountsBackend::*work)(const QByteArray &),
+                                               const char *request, QByteArray &replyBuffer)
+{
     const QByteArray body(request);
     auto answer = std::make_shared<std::promise<QByteArray>>();
     std::future<QByteArray> reply = answer->get_future();
     QMetaObject::invokeMethod(
-        self, [self, body, answer] { answer->set_value(self->submitToWallet(body)); },
+        this, [this, work, body, answer] { answer->set_value((this->*work)(body)); },
         Qt::QueuedConnection);
     while (reply.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
-        if (self->m_closing) {
-            self->m_submitReply = compact({{QStringLiteral("ok"), false},
-                                           {QStringLiteral("error"), QStringLiteral("the app is closing")}})
-                                      .toUtf8();
-            return self->m_submitReply.constData();
+        if (m_closing) {
+            replyBuffer = compact({{QStringLiteral("ok"), false},
+                                   {QStringLiteral("error"), QStringLiteral("the app is closing")}})
+                              .toUtf8();
+            return replyBuffer.constData();
         }
     }
-    self->m_submitReply = reply.get();
-    return self->m_submitReply.constData();
+    replyBuffer = reply.get();
+    return replyBuffer.constData();
+}
+
+QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
+{
+    const auto fail = [](const QString &error) {
+        return compact({{QStringLiteral("ok"), false}, {QStringLiteral("error"), error}}).toUtf8();
+    };
+    QString peer;
+    QString address;
+    QString problem;
+    if (!relayInput(relay(), &peer, &address, &problem))
+        return fail(problem);
+    if (peer.isEmpty())
+        return fail(QStringLiteral("no account relay is set"));
+    if (!m_contextReady)
+        return fail(QStringLiteral("libp2p is not reachable yet"));
+    if (!startLibp2p(&problem))
+        return fail(problem);
+
+    const QJsonObject args{
+        {QStringLiteral("peerId"), peer},
+        {QStringLiteral("multiaddrs"), QJsonArray{address}},
+        {QStringLiteral("proto"), QStringLiteral("/logos/accounts/relay/1.0.0")},
+        {QStringLiteral("requestB64"), QString::fromLatin1(withToken(request).toBase64())},
+        {QStringLiteral("timeoutMs"), 15000},
+    };
+    const LogosResult sent = modules().libp2p_module.protocolRequest(compact(args));
+    if (!sent.success) {
+        const QString error = sent.error.toString();
+        return fail(error.isEmpty() ? QStringLiteral("the request did not go through") : error);
+    }
+    const QByteArray reply = QByteArray::fromBase64(
+        sent.value.toMap().value(QStringLiteral("responseB64")).toString().toLatin1());
+    return compact({{QStringLiteral("ok"), true}, {QStringLiteral("reply"), QString::fromUtf8(reply)}})
+        .toUtf8();
+}
+
+bool AccountsBackend::startLibp2p(QString *problem)
+{
+    if (m_libp2pStarted) {
+        *problem = m_libp2pProblem;
+        return m_libp2pProblem.isEmpty();
+    }
+    const QJsonObject config{
+        {QStringLiteral("addrs"), QJsonArray{QStringLiteral("/ip4/127.0.0.1/tcp/0")}},
+        {QStringLiteral("transport"), QStringLiteral("tcp")},
+        {QStringLiteral("maxConnsPerPeer"), 1},
+        {QStringLiteral("mountGossipsub"), false},
+        {QStringLiteral("mountKad"), false},
+        {QStringLiteral("mountServiceDiscovery"), false},
+    };
+    const LogosResult created = modules().libp2p_module.createNode(compact(config));
+    // Another module made the node first, and runs it for us too.
+    if (!created.success && created.error.toString().contains(QStringLiteral("already"))) {
+        m_libp2pStarted = true;
+        return true;
+    }
+    if (!created.success) {
+        *problem = QStringLiteral("libp2p did not start: ") + created.error.toString();
+        return false;
+    }
+    // A second start while one still runs crashes libp2p_module.
+    m_libp2pStarted = true;
+    const LogosResult started = modules().libp2p_module.start();
+    if (!started.success) {
+        m_libp2pProblem = QStringLiteral("libp2p did not start: ") + started.error.toString();
+        *problem = m_libp2pProblem;
+        return false;
+    }
+    return true;
 }
 
 QByteArray AccountsBackend::submitToWallet(const QByteArray &request)
@@ -599,14 +729,71 @@ void AccountsBackend::discardPending()
          [this](const QJsonObject &) { edited(); });
 }
 
+void AccountsBackend::useRelay(bool on)
+{
+    setSponsored(on);
+}
+
+void AccountsBackend::chooseRelay(QString multiaddr, QString token)
+{
+    const QString what = QStringLiteral("chooseRelay");
+    if (!relaySupported()) {
+        report(what, QStringLiteral("This store publishes without a relay."));
+        return;
+    }
+    QString peer;
+    QString address;
+    QString problem;
+    if (!relayInput(multiaddr, &peer, &address, &problem)) {
+        report(what, problem);
+        return;
+    }
+    multiaddr = multiaddr.trimmed();
+    token = peer.isEmpty() ? QString() : token.trimmed();
+    QSettings settings(settingsPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("relay/address"), multiaddr);
+    settings.setValue(QStringLiteral("relay/token"), token);
+    settings.sync();
+    if (settings.status() != QSettings::NoError
+        || !QFile::setPermissions(settingsPath(), QFile::ReadOwner | QFile::WriteOwner)) {
+        report(what, QStringLiteral("The relay could not be saved to ") + settingsPath());
+        return;
+    }
+    setRelay(multiaddr);
+    setRelayToken(token);
+    setRelayAvailable(!multiaddr.isEmpty());
+    emit succeeded(what);
+}
+
+QByteArray AccountsBackend::withToken(const QByteArray &request) const
+{
+    if (relayToken().isEmpty())
+        return request;
+    QJsonObject submission = QJsonDocument::fromJson(request).object();
+    if (submission.isEmpty())
+        return request;
+    submission.insert(QStringLiteral("auth"),
+                      QJsonObject{{QStringLiteral("kind"), QStringLiteral("token")},
+                                  {QStringLiteral("payload"), relayToken()}});
+    return QJsonDocument(submission).toJson(QJsonDocument::Compact);
+}
+
+QString AccountsBackend::settingsPath()
+{
+    return QDir::cleanPath(vaultDirectory()) + QStringLiteral("-settings.ini");
+}
+
 void AccountsBackend::publish()
 {
     const QString address = selectedAddress();
     const QByteArray target = utf8(address);
+    const bool sponsored = relayAvailable() && this->sponsored();
 
-    setStatusText(QStringLiteral("Publishing"));
+    setStatusText(sponsored ? QStringLiteral("Publishing through the relay")
+                            : QStringLiteral("Publishing"));
     call(QStringLiteral("publish"),
-         [target](LogosAccountCore *core) {
+         [target, sponsored](LogosAccountCore *core) {
+             logos_account_core_set_sponsored(core, sponsored);
              return logos_account_core_publish(core, target.constData());
          },
          [this, address](const QJsonObject &reply) {

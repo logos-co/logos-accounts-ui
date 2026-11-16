@@ -19,11 +19,19 @@ Sheet {
     // the store holds only once it has.
     confirmEnabled: root.nothingLeft
                     || (root.store.pending.length > 0 && !root.store.busy
-                        && root.store.storeProblem === "")
+                        && root.store.storeProblem === ""
+                        && (!root.sponsoredHere || root.relayText !== ""))
     cancellable: !root.nothingLeft
-    awaitingText: qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
+    awaitingText: root.sponsoredHere
+                  ? qsTr("Publishing through the relay. A publish cannot be stopped once sent, and the update can take a few minutes to appear.")
+                  : qsTr("Publishing. A publish cannot be stopped once sent, and the store has up to 15 seconds to answer.")
     backend: root.store.backend
 
+    readonly property bool sponsoredHere: root.store.backend.relaySupported && root.store.backend.sponsored
+    readonly property string relayText: relayField.text.trim()
+    readonly property string tokenText: tokenField.text.trim()
+    // A relay typed here is saved first, and the publish made once it is.
+    property bool publishAfterRelay: false
     readonly property bool nothingLeft: root.store.hasAccount && root.store.pending.length === 0
                                         && !root.store.busy
     // How many entries this device had read as the sheet opened, or -1 when it
@@ -35,6 +43,14 @@ Sheet {
 
     function reset() {
         root.entriesBefore = root.store.resolved ? root.store.entries.length : -1
+        root.publishAfterRelay = false
+        relayField.text = root.store.backend.relay
+        tokenField.text = root.store.backend.relayToken
+    }
+
+    function startPublish() {
+        root.send("publish")
+        root.store.backend.publish()
     }
 
     onConfirmed: {
@@ -42,10 +58,24 @@ Sheet {
             root.close()
             return
         }
-        root.send("publish")
-        store.backend.publish()
+        if (root.sponsoredHere && (root.relayText !== root.store.backend.relay
+                                   || root.tokenText !== root.store.backend.relayToken)) {
+            root.publishAfterRelay = true
+            root.send("chooseRelay")
+            root.store.backend.chooseRelay(root.relayText, root.tokenText)
+            return
+        }
+        root.startPublish()
     }
-    onLanded: root.close()
+    onLanded: {
+        if (root.publishAfterRelay) {
+            root.publishAfterRelay = false
+            root.startPublish()
+            return
+        }
+        root.close()
+    }
+    onProblemChanged: if (root.problem !== "") root.publishAfterRelay = false
     onCancelled: root.close()
 
     LogosText {
@@ -121,6 +151,52 @@ Sheet {
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
         color: Theme.palette.textSecondary
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.store.backend.relaySupported && !root.nothingLeft
+        spacing: Theme.spacing.small
+
+        LogosCheckbox {
+            objectName: "publishSponsoredBox"
+            text: qsTr("Let the account relay pay the fee")
+            checked: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            onClicked: root.store.backend.useRelay(checked)
+        }
+        Field {
+            id: relayField
+            objectName: "publishRelayField"
+            Layout.fillWidth: true
+            visible: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            label: qsTr("Relay address")
+            mono: true
+            placeholderText: "/ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm\u2026"
+            help: qsTr("The relay's libp2p address, ending in its peer id, from whoever runs it. Kept for the next publish.")
+            onAccepted: tokenField.field.forceActiveFocus()
+            onTextChanged: root.problem = ""
+        }
+        Field {
+            id: tokenField
+            objectName: "publishRelayTokenField"
+            Layout.fillWidth: true
+            visible: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            label: qsTr("Relay token")
+            echoMode: TextInput.Password
+            placeholderText: qsTr("None")
+            help: qsTr("Only if the relay asks for one. Left empty, the relay is asked to serve this account like anyone else.")
+            onAccepted: root.submit()
+            onTextChanged: root.problem = ""
+        }
+        HelpText {
+            Layout.fillWidth: true
+            body: root.store.backend.sponsored
+                  ? qsTr("The relay publishes this update and pays for it, so the account needs no funds. If it refuses or is down, untick this and publish with your own funds.")
+                  : qsTr("Your own funds pay the fee.")
+        }
     }
 
     NoticeBar {
