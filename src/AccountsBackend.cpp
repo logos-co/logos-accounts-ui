@@ -1,6 +1,7 @@
 #include "AccountsBackend.h"
 
 #include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLoggingCategory>
@@ -138,19 +139,20 @@ AccountsBackend::AccountsBackend()
         setRelaySupported(true);
         QSettings settings(settingsPath(), QSettings::IniFormat);
         QString chosen = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY");
+        QString token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
+        if (settings.contains(QStringLiteral("relay/address"))) {
+            chosen = settings.value(QStringLiteral("relay/address")).toString();
+            token = settings.value(QStringLiteral("relay/token")).toString();
+        }
         QString peer;
         QString address;
         QString problem;
-        if (relayInput(chosen, &peer, &address, &problem) && !peer.isEmpty()) {
-            m_tokenPeer = peer;
-            m_token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
-        }
-        if (settings.contains(QStringLiteral("relay/address")))
-            chosen = settings.value(QStringLiteral("relay/address")).toString();
-        if (relayInput(chosen, &peer, &address, &problem))
+        if (relayInput(chosen, &peer, &address, &problem)) {
             setRelay(chosen.trimmed());
-        else
+            setRelayToken(peer.isEmpty() ? QString() : token.trimmed());
+        } else {
             qCWarning(lcBackend).noquote() << "the account relay is off:" << problem;
+        }
         setRelayAvailable(!relay().isEmpty());
         setSponsored(relayAvailable());
         const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
@@ -263,7 +265,7 @@ QByteArray AccountsBackend::sendToRelay(const QByteArray &request)
         {QStringLiteral("peerId"), peer},
         {QStringLiteral("multiaddrs"), QJsonArray{address}},
         {QStringLiteral("proto"), QStringLiteral("/logos/accounts/relay/1.0.0")},
-        {QStringLiteral("requestB64"), QString::fromLatin1(withToken(request, peer).toBase64())},
+        {QStringLiteral("requestB64"), QString::fromLatin1(withToken(request).toBase64())},
         {QStringLiteral("timeoutMs"), 15000},
     };
     const LogosResult sent = modules().libp2p_module.protocolRequest(compact(args));
@@ -732,7 +734,7 @@ void AccountsBackend::useRelay(bool on)
     setSponsored(on);
 }
 
-void AccountsBackend::chooseRelay(QString multiaddr)
+void AccountsBackend::chooseRelay(QString multiaddr, QString token)
 {
     const QString what = QStringLiteral("chooseRelay");
     if (!relaySupported()) {
@@ -747,28 +749,32 @@ void AccountsBackend::chooseRelay(QString multiaddr)
         return;
     }
     multiaddr = multiaddr.trimmed();
+    token = peer.isEmpty() ? QString() : token.trimmed();
     QSettings settings(settingsPath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("relay/address"), multiaddr);
+    settings.setValue(QStringLiteral("relay/token"), token);
     settings.sync();
-    if (settings.status() != QSettings::NoError) {
+    if (settings.status() != QSettings::NoError
+        || !QFile::setPermissions(settingsPath(), QFile::ReadOwner | QFile::WriteOwner)) {
         report(what, QStringLiteral("The relay could not be saved to ") + settingsPath());
         return;
     }
     setRelay(multiaddr);
+    setRelayToken(token);
     setRelayAvailable(!multiaddr.isEmpty());
     emit succeeded(what);
 }
 
-QByteArray AccountsBackend::withToken(const QByteArray &request, const QString &peer) const
+QByteArray AccountsBackend::withToken(const QByteArray &request) const
 {
-    if (m_token.isEmpty() || peer != m_tokenPeer)
+    if (relayToken().isEmpty())
         return request;
     QJsonObject submission = QJsonDocument::fromJson(request).object();
     if (submission.isEmpty())
         return request;
     submission.insert(QStringLiteral("auth"),
                       QJsonObject{{QStringLiteral("kind"), QStringLiteral("token")},
-                                  {QStringLiteral("payload"), m_token}});
+                                  {QStringLiteral("payload"), relayToken()}});
     return QJsonDocument(submission).toJson(QJsonDocument::Compact);
 }
 

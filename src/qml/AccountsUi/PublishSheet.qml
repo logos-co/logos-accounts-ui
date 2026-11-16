@@ -29,6 +29,7 @@ Sheet {
 
     readonly property bool sponsoredHere: root.store.backend.relaySupported && root.store.backend.sponsored
     readonly property string relayText: relayField.text.trim()
+    readonly property string tokenText: tokenField.text.trim()
     // A relay typed here is saved first, and the publish made once it is.
     property bool publishAfterRelay: false
     readonly property bool nothingLeft: root.store.hasAccount && root.store.pending.length === 0
@@ -44,6 +45,7 @@ Sheet {
         root.entriesBefore = root.store.resolved ? root.store.entries.length : -1
         root.publishAfterRelay = false
         relayField.text = root.store.backend.relay
+        tokenField.text = root.store.backend.relayToken
     }
 
     function startPublish() {
@@ -56,10 +58,11 @@ Sheet {
             root.close()
             return
         }
-        if (root.sponsoredHere && root.relayText !== root.store.backend.relay) {
+        if (root.sponsoredHere && (root.relayText !== root.store.backend.relay
+                                   || root.tokenText !== root.store.backend.relayToken)) {
             root.publishAfterRelay = true
             root.send("chooseRelay")
-            root.store.backend.chooseRelay(root.relayText)
+            root.store.backend.chooseRelay(root.relayText, root.tokenText)
             return
         }
         root.startPublish()
@@ -172,6 +175,19 @@ Sheet {
             mono: true
             placeholderText: "/ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm\u2026"
             help: qsTr("The relay's libp2p address, ending in its peer id, from whoever runs it. Kept for the next publish.")
+            onAccepted: tokenField.field.forceActiveFocus()
+            onTextChanged: root.problem = ""
+        }
+        Field {
+            id: tokenField
+            objectName: "publishRelayTokenField"
+            Layout.fillWidth: true
+            visible: root.store.backend.sponsored
+            enabled: root.awaiting === ""
+            label: qsTr("Relay token")
+            echoMode: TextInput.Password
+            placeholderText: qsTr("None")
+            help: qsTr("Only if the relay asks for one. Left empty, the relay is asked to serve this account like anyone else.")
             onAccepted: root.submit()
             onTextChanged: root.problem = ""
         }

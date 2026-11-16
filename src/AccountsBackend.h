@@ -48,7 +48,7 @@ public:
     void stageAddInstallation(QString keyHex) override;
     void stageSetDisplayName(QString name) override;
     void useRelay(bool on) override;
-    void chooseRelay(QString multiaddr) override;
+    void chooseRelay(QString multiaddr, QString token) override;
     void stageRevoke(int index) override;
     void discardPending() override;
     void publish() override;
@@ -114,10 +114,9 @@ private:
     /// Runs on this object's thread. Replies as the library's relay sender
     /// does.
     QByteArray sendToRelay(const QByteArray &request);
-    /// `request` with `LOGOS_ACCOUNTS_RELAY_TOKEN` as its credentials when it
-    /// goes to `peer`, the relay `LOGOS_ACCOUNTS_RELAY` names, and as it is to
-    /// any other: a token is for the relay that issued it.
-    QByteArray withToken(const QByteArray &request, const QString &peer) const;
+    /// `request` with `relayToken` as its credentials, or as it is when the
+    /// relay serves everyone.
+    QByteArray withToken(const QByteArray &request) const;
     /// Where the relay chosen in the app is kept: beside the vault, not in it.
     static QString settingsPath();
     /// Makes sure the libp2p module runs a node, or says why not.
@@ -146,9 +145,6 @@ private:
     QByteArray m_submitReply;
     /// The last relay reply, which the library reads before the next call.
     QByteArray m_relayReply;
-    /// The relay the environment names, and the token sent to it alone.
-    QString m_tokenPeer;
-    QString m_token;
     bool m_libp2pStarted = false;
     /// Why the one start libp2p gets failed, if it did.
     QString m_libp2pProblem;

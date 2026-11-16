@@ -16,9 +16,9 @@
 // Env:
 //   APP_PORT   inspector port (default 3768)
 //   OUT_DIR    screenshot output dir (default ./images)
-//   WALKTHROUGH_RELAY
-//              if set, a relay address typed into the publish sheet, so the
-//              relay publishes and pays
+//   WALKTHROUGH_RELAY, WALKTHROUGH_RELAY_TOKEN
+//              if set, a relay address, and its token if any, typed into the
+//              publish sheet, so the relay publishes and pays
 import net from "node:net";
 import fs from "node:fs";
 
@@ -330,6 +330,7 @@ async function publish(insp) {
     if ((await evalq(insp, "store.backend.sponsored")) !== true) await click(insp, "publishSponsoredBox");
     await waitUntil(insp, "store.backend.sponsored", true);
     await type(insp, "publishRelayField", relay);
+    await type(insp, "publishRelayTokenField", process.env.WALKTHROUGH_RELAY_TOKEN || "");
   }
   await confirm(insp, "publishSheet");
   await waitUntil(insp, "store.pending.length", 0);
