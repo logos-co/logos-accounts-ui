@@ -14,12 +14,10 @@ LogosScrollView {
     signal cancelled()
 
     id: root
-    // Taller than the screen, the panel scrolls rather than lose its ends,
-    // and the bar stays up so the cut reads as a scroll. The range is the
-    // panel's alone: one that reads the view's size is a binding loop.
+    // Taller than the screen, the panel scrolls rather than lose its ends.
+    // The range is the panel's alone: one that reads the view's size is a
+    // binding loop.
     contentHeight: panel.implicitHeight + 48
-    ScrollBar.vertical.policy: root.ScrollBar.vertical.size < 1
-                               ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
 
     // A click makes the checkbox write its own `checked`, so the box is where
     // this choice lives and the screen reads it from there.

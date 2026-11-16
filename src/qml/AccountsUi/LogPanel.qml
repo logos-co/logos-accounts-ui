@@ -159,10 +159,6 @@ Panel {
         // The header and about three rows: squeezed past that the log reads
         // as empty, so the screen scrolls instead.
         Layout.minimumHeight: Math.min(table.implicitHeight, 120)
-        // Pinned where there is something to scroll, as the left column does:
-        // a bar hidden at rest hides the pending rows under the fold.
-        ScrollBar.vertical.policy: scroller.ScrollBar.vertical.size < 1
-                                   ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
 
         LogTable {
             id: table
