@@ -8,8 +8,11 @@ else()
 endif()
 
 # SOURCES must be listed explicitly -- the macro does not glob.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json" METADATA_JSON)
+string(JSON MODULE_NAME GET ${METADATA_JSON} name)
+
 logos_module(
-    NAME accounts_ui
+    NAME ${MODULE_NAME}
     REP_FILE src/AccountsBackend.rep
     SOURCES
         src/AccountsBackend.h

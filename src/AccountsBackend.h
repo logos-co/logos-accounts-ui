@@ -9,7 +9,7 @@
 #include <functional>
 
 #include "rep_AccountsBackend_source.h"
-#include "logos_ui_plugin_context.h"
+#include "logos_module_context.h"
 
 struct LogosAccountCore;
 
@@ -20,17 +20,16 @@ struct LogosAccountCore;
 // the linked-in Rust library, and this class marshals: JSON in from the
 // library, properties out to the view, the view's strings back in.
 //
-// It is a `ui_qml` backend, so the runtime hands it no data directory the way
-// it hands a core module `instance_persistence_path`. The vault path is
-// therefore this app's own choice, and `vaultDirectory()` is where that choice
-// lives.
+// It runs as a core module, so the vault lives in the data folder the runtime
+// hands it (`instancePersistencePath()`); `vaultDirectory()` is where that
+// choice lives. A vault the ui-host backend kept is moved there once.
 //
 // Threading: the two calls that reach the store take as long as the store
 // takes, and a slot that blocks here blocks the view behind it. So every call
 // runs on a one-thread pool and comes back through the event loop, and `busy`
 // is what the view guards its buttons with.
 class AccountsBackend : public AccountsBackendSimpleSource,
-                        public LogosUiPluginContext
+                        public LogosModuleContext
 {
 public:
     AccountsBackend();
@@ -55,9 +54,14 @@ public:
     void dismissNotice() override;
 
     /// Where this app keeps account keys. `LOGOS_ACCOUNTS_VAULT_DIR` if it is
-    /// set, otherwise `module_data/accounts_ui/vault` under `LOGOS_USER_DIR`,
-    /// or under ui-host's application data when the host exports no root.
-    static QString vaultDirectory();
+    /// set, otherwise `vault` in the module's data folder; empty without one.
+    QString vaultDirectory() const;
+    /// Where the ui-host backend kept them: `module_data/accounts_ui/vault`
+    /// under `LOGOS_USER_DIR`, or under ui-host's application data.
+    static QString legacyVaultDirectory();
+    /// Moves what the ui-host backend kept, the vault and the relay settings
+    /// beside it, to where this backend keeps them.
+    void migrateLegacyVault(const QString &vault);
     /// `LOGOS_ACCOUNTS_SEQUENCER_URL` if it is set, otherwise the library's
     /// default LEZ sequencer. Not used when `LOGOS_ACCOUNTS_STORE_URL` names a
     /// chat-store to publish to instead. The literal "memory" runs against an in-process
@@ -118,7 +122,10 @@ private:
     /// relay serves everyone.
     QByteArray withToken(const QByteArray &request) const;
     /// Where the relay chosen in the app is kept: beside the vault, not in it.
-    static QString settingsPath();
+    static QString settingsPath(const QString &vault);
+    /// Opens the library on `vault` and wires it to the store, the wallet and
+    /// the relay. Called once the data folder is known.
+    void openCore(const QString &vault);
     /// Makes sure the libp2p module runs a node, or says why not.
     bool startLibp2p(QString *problem);
 

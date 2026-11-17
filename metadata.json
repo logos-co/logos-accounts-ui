@@ -7,6 +7,7 @@
   "category": "general",
   "description": "Create and manage Logos accounts and their keys.",
   "main": "accounts_ui_plugin",
+  "backend": "module",
   "icon": "src/icons/accounts_ui.png",
   "view": "qml/AccountsView.qml",
 

@@ -2,11 +2,10 @@
   description = "logos-accounts-ui: hold an account's key, write its log, publish it.";
 
   inputs = {
-    # The revision basecamp 0.3.0 builds logos-package-manager-ui with, which
-    # pins the SDK, protocol, ui-host and design system that host runs. The view
-    # compiles against the host's design system at runtime, so a control the
-    # host lacks fails qmllint and the walkthrough here.
-    logos-module-builder.url = "github:logos-co/logos-module-builder/1adcfb86d80daab42d49bb72ab06ac9737b28575";
+    # Follows master; flake.lock holds the revision. The view compiles against
+    # the host's design system at runtime, so a release branch pins the
+    # builder its Basecamp release builds with.
+    logos-module-builder.url = "github:logos-co/logos-module-builder";
 
     # The LEZ wallet, which pays for every write to the account registry.
     lez_core.url = "github:logos-blockchain/logos-execution-zone-module/fdd6a75a74c6b18a11f5d92eb625c628fd251ac8";
