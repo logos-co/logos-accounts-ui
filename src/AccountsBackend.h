@@ -47,6 +47,8 @@ public:
     void stopObserving(QString address) override;
     void stageAddInstallation(QString keyHex) override;
     void stageSetDisplayName(QString name) override;
+    void useRelay(bool on) override;
+    void chooseRelay(QString multiaddr, QString token) override;
     void stageRevoke(int index) override;
     void discardPending() override;
     void publish() override;
@@ -101,6 +103,24 @@ private:
     QByteArray submitToWallet(const QByteArray &request);
     /// The wallet account that pays for a write, or empty with `problem` set.
     QString payerFor(QString *problem);
+    /// The library's relay sender: hands `request` to this object's thread and
+    /// waits for the relay's answer, which stays valid until the next call.
+    static const char *relayTrampoline(void *context, const char *request);
+    /// Runs `work` on this object's thread and waits for it, keeping its
+    /// answer in `replyBuffer` until the next call. Gives up once closing.
+    const char *answerOnOwnThread(QByteArray (AccountsBackend::*work)(const QByteArray &),
+                                  const char *request, QByteArray &replyBuffer);
+    /// Sends one submission to the relay at `relay` over the libp2p module.
+    /// Runs on this object's thread. Replies as the library's relay sender
+    /// does.
+    QByteArray sendToRelay(const QByteArray &request);
+    /// `request` with `relayToken` as its credentials, or as it is when the
+    /// relay serves everyone.
+    QByteArray withToken(const QByteArray &request) const;
+    /// Where the relay chosen in the app is kept: beside the vault, not in it.
+    static QString settingsPath();
+    /// Makes sure the libp2p module runs a node, or says why not.
+    bool startLibp2p(QString *problem);
 
     void setNotice(const QString &kind, const QString &title, const QString &body);
     void report(const QString &what, const QString &message);
@@ -123,4 +143,9 @@ private:
     std::atomic<bool> m_closing{false};
     /// The last submitter reply, which the library reads before the next call.
     QByteArray m_submitReply;
+    /// The last relay reply, which the library reads before the next call.
+    QByteArray m_relayReply;
+    bool m_libp2pStarted = false;
+    /// Why the one start libp2p gets failed, if it did.
+    QString m_libp2pProblem;
 };

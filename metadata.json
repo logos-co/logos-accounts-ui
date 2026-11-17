@@ -1,7 +1,7 @@
 {
   "name": "accounts_ui",
   "display_name": "Accounts",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "ui_qml",
   "interface": "universal",
   "category": "general",
@@ -10,7 +10,7 @@
   "icon": "src/icons/accounts_ui.png",
   "view": "qml/AccountsView.qml",
 
-  "dependencies": ["lez_core"],
+  "dependencies": ["lez_core", "libp2p_module"],
 
   "codegen": {
     "rep": "src/AccountsBackend.rep",

@@ -211,12 +211,7 @@ Item {
         // left: a range that reads the view's size is a binding loop.
         contentWidth: managePane.Layout.minimumWidth
         contentHeight: managePane.Layout.minimumHeight
-        // Pinned where there is something to scroll, as the columns inside
-        // are: a bar hidden at rest leaves the screen reading as cut.
-        ScrollBar.horizontal.policy: manageScroller.ScrollBar.horizontal.size < 1
-                                     ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
-        ScrollBar.vertical.policy: manageScroller.ScrollBar.vertical.size < 1
-                                   ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
+        ScrollBar.horizontal.policy: ScrollBar.AsNeeded
 
         ColumnLayout {
             id: managePane
@@ -265,11 +260,6 @@ Item {
                     Layout.maximumWidth: 520
                     Layout.minimumWidth: 320
                     Layout.fillHeight: true
-                    // This column runs past a 768-high window, and a bar hidden at
-                    // rest leaves its last sentence reading as cut rather than
-                    // scrollable. Pinned only where there is something to scroll.
-                    ScrollBar.vertical.policy: leftScroller.ScrollBar.vertical.size < 1
-                                               ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
 
                     ColumnLayout {
                         width: leftScroller.availableWidth

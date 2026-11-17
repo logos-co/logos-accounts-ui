@@ -33,7 +33,17 @@ one per address, readable by anyone who holds it. The app reads them from the
 LEZ sequencer (`https://testnet.lez.logos.co` by default) and verifies each one
 before showing it.
 
-A publish is an `Append` transaction, and LEZ charges a fee for it, so the app
+A new account holds no funds yet, so an **account relay** can publish it
+instead. In the publish sheet, tick **Let the account relay pay the fee** and
+give the relay's libp2p address, ending in its peer id, such as
+`/ip4/203.0.113.7/tcp/9010/p2p/16Uiu2HAm…`, and its token if it asks for one;
+it is reached through the **libp2p** module, and both are kept beside the vault
+for the next publish. Untick it to pay with your own funds, for example when
+the relay refuses or is down. `LOGOS_ACCOUNTS_RELAY` and
+`LOGOS_ACCOUNTS_RELAY_TOKEN` fill them in until a relay is saved. See
+[account-registry-lez](https://github.com/logos-messaging/account-registry-lez#account-relay).
+
+Otherwise a publish is an `Append` transaction, and LEZ charges a fee for it, so the app
 sends it through the **LEZ Wallet** module, which must be open. The first
 public wallet account that can cover the fee pays; `LOGOS_ACCOUNTS_LEZ_PAYER`
 names another, by its hex account id. The registry accepts a log only where it extends the one it
@@ -42,15 +52,18 @@ holds, and caps a log at 32 KiB. A published log is permanent.
 The app speaks LEZ v0.4, so it needs a v0.4 sequencer and a registry deployed
 there. The LEZ Wallet module still speaks v0.3, and a v0.4 sequencer refuses
 its transactions: until the module moves to v0.4, pay with
-`LOGOS_ACCOUNTS_LEZ_PAYER_KEY`.
+`LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, or through an account relay.
 
-The registry program is not deployed yet: set `LOGOS_ACCOUNTS_REGISTRY_PROGRAM`
-to its base58 account id. `LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, the hex key of a
-funded LEZ account, pays for writes directly, with no wallet: with
+By default the app uses the registry deployed on the public testnet,
+`BHNNfnhPMNMZ7N3oAtbu1iM1HkFyraWx2UjBvxhj8wTa` (see
+[Deployments](https://github.com/logos-messaging/account-registry-lez#deployments)).
+`LOGOS_ACCOUNTS_REGISTRY_PROGRAM` names another, by its base58 account id.
+`LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, the hex key of a funded LEZ account, pays for
+writes directly, with no wallet: with
 `LOGOS_ACCOUNTS_SEQUENCER_URL=http://localhost:3040` that is how the app runs
-against a local sequencer. Until then, `LOGOS_ACCOUNTS_STORE_URL` publishes to
-chat-store's `/v1/account` instead, e.g. `https://devnet.chat-kc.logos.co`, with
-no wallet involved.
+against a local sequencer. `LOGOS_ACCOUNTS_STORE_URL` publishes to chat-store's
+`/v1/account` instead, e.g. `https://devnet.chat-kc.logos.co`, with no wallet
+involved.
 
 ## Develop
 

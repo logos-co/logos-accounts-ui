@@ -11,6 +11,9 @@
     # The LEZ wallet, which pays for every write to the account registry.
     lez_core.url = "github:logos-blockchain/logos-execution-zone-module/fdd6a75a74c6b18a11f5d92eb625c628fd251ac8";
 
+    # libp2p, which carries a publish to an account relay.
+    libp2p_module.url = "github:logos-co/logos-libp2p-module/v1.1.1";
+
     # The account crates need a newer Rust than the builder's 1.89. Official
     # binaries, built against an old glibc, so the archive still links into a
     # plugin built against the builder's.
@@ -56,7 +59,7 @@
           rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
         in rustPlatform.buildRustPackage {
           pname = "logos-account-core";
-          version = "0.3.0";
+          version = "0.4.0";
 
           # Never copy a local `target/` into the store: it is hundreds of MB of
           # build cache, and nix path: sources do not honour .gitignore.
