@@ -97,8 +97,8 @@ impl From<LezAccountRegError> for StoreError {
 /// ```
 ///
 /// The transaction is one message, `instruction`, to the actor of `program`
-/// on `account`, which does not sign. Whoever implements this
-/// picks the fee payer.
+/// on `account`, which does not sign. Whoever implements this picks the fee
+/// payer.
 pub type Submit = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 
 #[derive(Clone, Default)]
@@ -665,7 +665,7 @@ pub(crate) mod tests {
     /// makes every request fail.
     #[derive(Clone, Default)]
     pub(crate) struct FakeRegistry {
-        shards: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        states: Arc<Mutex<HashMap<String, Vec<u8>>>>,
         pub(crate) down: Arc<AtomicBool>,
         pub(crate) submitted: Arc<Mutex<Vec<serde_json::Value>>>,
     }
@@ -710,7 +710,7 @@ pub(crate) mod tests {
                 assert_eq!(request["method"], "getAccount");
                 let account: AccountId = request["params"][0].as_str().unwrap().parse().unwrap();
                 let data = self
-                    .shards
+                    .states
                     .lock()
                     .unwrap()
                     .get(&hex::encode(account.value()))
@@ -735,7 +735,7 @@ pub(crate) mod tests {
         pub(crate) fn hold(&self, addr: &AccountAddr, log: &SignedAccountLog) {
             let registry = Registry::connect("http://localhost", PROGRAM.parse().unwrap()).unwrap();
             let account = hex::encode(registry.account_id(addr).value());
-            self.shards.lock().unwrap().insert(account, log.to_bytes());
+            self.states.lock().unwrap().insert(account, log.to_bytes());
         }
 
         /// An account relay that publishes every submission on this
@@ -765,12 +765,12 @@ pub(crate) mod tests {
             let signature = &instruction[33..97];
             let entries = &instruction[101..];
             let account = request["account"].as_str().unwrap().to_owned();
-            let mut shards = self.shards.lock().unwrap();
-            let payload = match shards.get(&account) {
+            let mut states = self.states.lock().unwrap();
+            let payload = match states.get(&account) {
                 Some(stored) => stored[64..].to_vec(),
                 None => ACCOUNT_LOG_DOMAIN.to_vec(),
             };
-            shards.insert(account, [signature, &payload, entries].concat());
+            states.insert(account, [signature, &payload, entries].concat());
             Ok(())
         }
     }
