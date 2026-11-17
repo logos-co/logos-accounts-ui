@@ -1,7 +1,9 @@
 #include "AccountsBackend.h"
 
+#include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLoggingCategory>
@@ -121,54 +123,6 @@ bool relayInput(const QString &multiaddr, QString *peer, QString *address, QStri
 AccountsBackend::AccountsBackend()
 {
     m_pool.setMaxThreadCount(1);
-
-    const QString vault = vaultDirectory();
-    const QString chatStore = qEnvironmentVariable("LOGOS_ACCOUNTS_STORE_URL");
-    if (!chatStore.isEmpty()) {
-        m_core = logos_account_core_new_with_chat_store(utf8(vault).constData(),
-                                                        utf8(chatStore).constData());
-        setStoreUrl(locationPrefix(chatStore) + QStringLiteral("/v1/account/"));
-    } else {
-        const QString sequencer = configuredSequencerUrl();
-        const QString program = configuredRegistryProgram();
-        m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
-                                        utf8(program).constData());
-        setStoreUrl(locationPrefix(sequencer) + QStringLiteral(" \u00b7 "));
-        logos_account_core_set_relay_sender(m_core, &AccountsBackend::relayTrampoline, this,
-                                            nullptr);
-        setRelaySupported(true);
-        QSettings settings(settingsPath(), QSettings::IniFormat);
-        QString chosen = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY");
-        QString token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
-        if (settings.contains(QStringLiteral("relay/address"))) {
-            chosen = settings.value(QStringLiteral("relay/address")).toString();
-            token = settings.value(QStringLiteral("relay/token")).toString();
-        }
-        QString peer;
-        QString address;
-        QString problem;
-        if (relayInput(chosen, &peer, &address, &problem)) {
-            setRelay(chosen.trimmed());
-            setRelayToken(peer.isEmpty() ? QString() : token.trimmed());
-        } else {
-            qCWarning(lcBackend).noquote() << "the account relay is off:" << problem;
-        }
-        setRelayAvailable(!relay().isEmpty());
-        setSponsored(relayAvailable());
-        const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
-        if (payerKey.isEmpty())
-            logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
-        else if (!logos_account_core_set_payer_key(m_core, payerKey.constData()))
-            qCWarning(lcBackend) << "LOGOS_ACCOUNTS_LEZ_PAYER_KEY is not a LEE key";
-    }
-
-    if (!m_core) {
-        setStatusText(QStringLiteral("Could not read the vault"));
-        setVaultProblem(QStringLiteral("the account core could not start on ") + vault);
-        return;
-    }
-    setStatusText(QStringLiteral("Ready"));
-    reloadAccounts();
 }
 
 AccountsBackend::~AccountsBackend()
@@ -179,20 +133,69 @@ AccountsBackend::~AccountsBackend()
     logos_account_core_free(m_core);
 }
 
-QString AccountsBackend::vaultDirectory()
+QString AccountsBackend::vaultDirectory() const
 {
     const QByteArray override = qgetenv("LOGOS_ACCOUNTS_VAULT_DIR");
     if (!override.isEmpty())
         return QString::fromLocal8Bit(override);
+    // Empty without a data folder, so the vault is never opened relative to
+    // the working directory.
+    const QString data = QString::fromStdString(instancePersistencePath());
+    return data.isEmpty() ? QString() : QDir(data).filePath(QStringLiteral("vault"));
+}
 
-    // A view plugin is assigned no directory, so the vault goes where a core
-    // module's would: module_data under the profile root. Basecamp exports that
-    // root as LOGOS_USER_DIR only for --user-dir (logos-basecamp#315); otherwise
-    // this is ui-host's own AppDataLocation, which every profile shares.
+QString AccountsBackend::legacyVaultDirectory()
+{
+    // Basecamp exports the profile root as LOGOS_USER_DIR only for --user-dir
+    // (logos-basecamp#315); otherwise it was ui-host's AppDataLocation,
+    // "Logos/ui-host", which every profile shared.
     QString root = qEnvironmentVariable("LOGOS_USER_DIR");
-    if (root.isEmpty())
-        root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (root.isEmpty()) {
+#ifdef Q_OS_WIN
+        // AppDataLocation is the roaming folder there, not the generic (local) one.
+        const QString base = qEnvironmentVariable("APPDATA");
+#else
+        const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+#endif
+        if (base.isEmpty())
+            return {};
+        root = QDir(base).filePath(QStringLiteral("Logos/ui-host"));
+    }
     return QDir(root).filePath(QStringLiteral("module_data/accounts_ui/vault"));
+}
+
+void AccountsBackend::migrateLegacyVault(const QString &vault)
+{
+    const QString legacy = legacyVaultDirectory();
+    if (legacy.isEmpty() || QDir(legacy) == QDir(vault))
+        return;
+
+    // Moved, not copied: a key is kept in one place. A file that is already
+    // here is not overwritten, and its old copy stays where it was. Regular
+    // files only: a symlink is neither moved nor followed, so nothing from
+    // outside the old vault ends up in this one.
+    const auto move = [](const QString &from, const QString &to) {
+        if (!QFileInfo(from).isFile() || QFileInfo(from).isSymLink() || QFile::exists(to))
+            return false;
+        if (QFile::rename(from, to))
+            return true;
+        qWarning() << "accounts_ui: could not move" << from << "to" << to;
+        return false;
+    };
+
+    int moved = 0;
+    const QStringList files = QDir(legacy).entryList(QDir::Files | QDir::Hidden | QDir::NoSymLinks);
+    if (!files.isEmpty()) {
+        QDir().mkpath(vault);
+        QFile::setPermissions(vault, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        for (const QString &name : files)
+            moved += move(QDir(legacy).filePath(name), QDir(vault).filePath(name));
+        QDir().rmdir(legacy);
+    }
+    // The relay the app was told to use, kept beside the vault.
+    moved += move(settingsPath(legacy), settingsPath(vault));
+    if (moved)
+        qInfo() << "accounts_ui: moved" << moved << "file(s) from" << legacy << "to" << vault;
 }
 
 QString AccountsBackend::configuredSequencerUrl()
@@ -378,8 +381,70 @@ void AccountsBackend::onContextReady()
     // only from here on, and the first read of the registry happens here
     // rather than in the constructor.
     m_contextReady = true;
-    if (m_core && !selectedAddress().isEmpty())
+
+    // The vault lives in the data folder, known only from here on.
+    const QString vault = vaultDirectory();
+    if (vault.isEmpty()) {
+        setStatusText(QStringLiteral("Could not read the vault"));
+        setVaultProblem(QStringLiteral("the host gave this app no data folder for its vault"));
+        return;
+    }
+    if (qEnvironmentVariableIsEmpty("LOGOS_ACCOUNTS_VAULT_DIR"))
+        migrateLegacyVault(vault);
+    openCore(vault);
+    if (!m_core) {
+        setStatusText(QStringLiteral("Could not read the vault"));
+        setVaultProblem(QStringLiteral("the account core could not start on ") + vault);
+        return;
+    }
+    setStatusText(QStringLiteral("Ready"));
+    reloadAccounts();
+    if (!selectedAddress().isEmpty())
         refresh();
+}
+
+void AccountsBackend::openCore(const QString &vault)
+{
+    const QString chatStore = qEnvironmentVariable("LOGOS_ACCOUNTS_STORE_URL");
+    if (!chatStore.isEmpty()) {
+        m_core = logos_account_core_new_with_chat_store(utf8(vault).constData(),
+                                                        utf8(chatStore).constData());
+        setStoreUrl(locationPrefix(chatStore) + QStringLiteral("/v1/account/"));
+        return;
+    }
+    const QString sequencer = configuredSequencerUrl();
+    const QString program = configuredRegistryProgram();
+    m_core = logos_account_core_new(utf8(vault).constData(), utf8(sequencer).constData(),
+                                    utf8(program).constData());
+    setStoreUrl(locationPrefix(sequencer) + QStringLiteral(" \u00b7 "));
+    if (!m_core)
+        return;
+    logos_account_core_set_relay_sender(m_core, &AccountsBackend::relayTrampoline, this,
+                                        nullptr);
+    setRelaySupported(true);
+    QSettings settings(settingsPath(vault), QSettings::IniFormat);
+    QString chosen = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY");
+    QString token = qEnvironmentVariable("LOGOS_ACCOUNTS_RELAY_TOKEN");
+    if (settings.contains(QStringLiteral("relay/address"))) {
+        chosen = settings.value(QStringLiteral("relay/address")).toString();
+        token = settings.value(QStringLiteral("relay/token")).toString();
+    }
+    QString peer;
+    QString address;
+    QString problem;
+    if (relayInput(chosen, &peer, &address, &problem)) {
+        setRelay(chosen.trimmed());
+        setRelayToken(peer.isEmpty() ? QString() : token.trimmed());
+    } else {
+        qCWarning(lcBackend).noquote() << "the account relay is off:" << problem;
+    }
+    setRelayAvailable(!relay().isEmpty());
+    setSponsored(relayAvailable());
+    const QByteArray payerKey = qgetenv("LOGOS_ACCOUNTS_LEZ_PAYER_KEY");
+    if (payerKey.isEmpty())
+        logos_account_core_set_submitter(m_core, &AccountsBackend::submitTrampoline, this);
+    else if (!logos_account_core_set_payer_key(m_core, payerKey.constData()))
+        qCWarning(lcBackend) << "LOGOS_ACCOUNTS_LEZ_PAYER_KEY is not a LEE key";
 }
 
 void AccountsBackend::call(const QString &what,
@@ -750,13 +815,14 @@ void AccountsBackend::chooseRelay(QString multiaddr, QString token)
     }
     multiaddr = multiaddr.trimmed();
     token = peer.isEmpty() ? QString() : token.trimmed();
-    QSettings settings(settingsPath(), QSettings::IniFormat);
+    const QString path = settingsPath(vaultDirectory());
+    QSettings settings(path, QSettings::IniFormat);
     settings.setValue(QStringLiteral("relay/address"), multiaddr);
     settings.setValue(QStringLiteral("relay/token"), token);
     settings.sync();
     if (settings.status() != QSettings::NoError
-        || !QFile::setPermissions(settingsPath(), QFile::ReadOwner | QFile::WriteOwner)) {
-        report(what, QStringLiteral("The relay could not be saved to ") + settingsPath());
+        || !QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner)) {
+        report(what, QStringLiteral("The relay could not be saved to ") + path);
         return;
     }
     setRelay(multiaddr);
@@ -778,9 +844,9 @@ QByteArray AccountsBackend::withToken(const QByteArray &request) const
     return QJsonDocument(submission).toJson(QJsonDocument::Compact);
 }
 
-QString AccountsBackend::settingsPath()
+QString AccountsBackend::settingsPath(const QString &vault)
 {
-    return QDir::cleanPath(vaultDirectory()) + QStringLiteral("-settings.ini");
+    return QDir::cleanPath(vault) + QStringLiteral("-settings.ini");
 }
 
 void AccountsBackend::publish()
