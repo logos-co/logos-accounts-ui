@@ -59,7 +59,7 @@
           rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
         in rustPlatform.buildRustPackage {
           pname = "logos-account-core";
-          version = "0.3.0";
+          version = "0.4.0";
 
           # Never copy a local `target/` into the store: it is hundreds of MB of
           # build cache, and nix path: sources do not honour .gitignore.
