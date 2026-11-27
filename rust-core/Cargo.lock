@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "account-registry-client"
 version = "0.4.0-rc.3"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=97e7d909d1e71ec7f95e69a1cce5e4e7899c089d#97e7d909d1e71ec7f95e69a1cce5e4e7899c089d"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=d46a90d04ec4842a657bafb1cde2e7e7cc795066#d46a90d04ec4842a657bafb1cde2e7e7cc795066"
 dependencies = [
  "account",
  "account-log",
@@ -42,7 +42,7 @@ dependencies = [
 [[package]]
 name = "account-registry-core"
 version = "0.4.1"
-source = "git+https://github.com/logos-messaging/account-registry-lez?rev=97e7d909d1e71ec7f95e69a1cce5e4e7899c089d#97e7d909d1e71ec7f95e69a1cce5e4e7899c089d"
+source = "git+https://github.com/logos-messaging/account-registry-lez?rev=d46a90d04ec4842a657bafb1cde2e7e7cc795066#d46a90d04ec4842a657bafb1cde2e7e7cc795066"
 dependencies = [
  "borsh",
  "lee_core",
@@ -1317,9 +1317,9 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -3514,9 +3514,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",
