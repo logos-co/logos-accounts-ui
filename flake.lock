@@ -2683,16 +2683,16 @@
     "logos-execution-zone_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1794360994,
-        "narHash": "sha256-ElqO2Xg5FLs1EeKtPvYt85QnPn04HCM2NF70dptbVlo=",
+        "lastModified": 1795747177,
+        "narHash": "sha256-gL/YGVLdJdh9BvO5L/v7SQ68/pBSIqs3z8+e4RCF3XY=",
         "owner": "logos-blockchain",
         "repo": "logos-execution-zone",
-        "rev": "bafd07be0701398f9bc435f73ab05e9a7936c301",
+        "rev": "a255b42c0fc80d1cb219454a3a1f5ec3b5d92115",
         "type": "github"
       },
       "original": {
         "owner": "logos-blockchain",
-        "ref": "v0.4.0-rc3",
+        "ref": "v0.4.0",
         "repo": "logos-execution-zone",
         "type": "github"
       }

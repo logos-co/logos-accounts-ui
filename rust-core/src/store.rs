@@ -25,7 +25,7 @@ use account::{AccountProvider, AccountPublisher};
 use account_log::{AccountAddr, SignedAccountLog, MAX_PAYLOAD_BYTES};
 use account_registry_client::relay::{RelayAuth, RelayReply, RelayRequest};
 use account_registry_client::{
-    AccountId, LezAccountRegError, PrivateKey, Registry, PUBLISH_TIMEOUT,
+    AccountId, LezAccountRegError, PublicAccountSecret, Registry, PUBLISH_TIMEOUT,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -121,7 +121,7 @@ pub struct LezStore {
     sequencer: Arc<str>,
     registry: Result<Registry, Arc<str>>,
     submitter: Submitter,
-    payer: Arc<Mutex<Option<PrivateKey>>>,
+    payer: Arc<Mutex<Option<PublicAccountSecret>>>,
     relay: Arc<Mutex<Option<RelayTarget>>>,
     sponsored: Arc<AtomicBool>,
 }
@@ -166,7 +166,7 @@ impl LezStore {
     pub fn set_payer_key(&self, key: &str) -> Result<(), StoreError> {
         let key = key
             .trim()
-            .parse::<PrivateKey>()
+            .parse::<PublicAccountSecret>()
             .map_err(|_| StoreError::NotConfigured("the payer key is not a LEE key".into()))?;
         *self.payer.lock().expect("payer lock") = Some(key);
         Ok(())
