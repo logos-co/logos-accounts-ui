@@ -55,9 +55,10 @@ still speaks v0.3, and a v0.4 sequencer refuses its transactions: until the
 module moves to v0.4, pay with `LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, or through an
 account relay.
 
-By default the app uses the registry deployed on the public testnet,
-`BHNNfnhPMNMZ7N3oAtbu1iM1HkFyraWx2UjBvxhj8wTa` (see
-[Deployments](https://github.com/logos-messaging/account-registry-lez#deployments)).
+By default the app uses the public testnet's registry on LEZ v0.4,
+`CHqXMsqG3sgrwzN5Ago1e8AZSR7NKA4kpwk3dZeJPs6A` (see
+[Deployments](https://github.com/logos-messaging/account-registry-lez#deployments)),
+where it is deployed once the testnet runs v0.4.
 `LOGOS_ACCOUNTS_REGISTRY_PROGRAM` names another, by its base58 account id.
 `LOGOS_ACCOUNTS_LEZ_PAYER_KEY`, the hex key of a funded LEZ account, pays for
 writes directly, with no wallet: with
