@@ -23,8 +23,8 @@ dependencies = [
 
 [[package]]
 name = "account-registry-client"
-version = "0.4.0-rc.3"
-source = "git+https://github.com/logos-messaging/account-registry-lez?tag=v0.4.0-rc.3#fadc9f6c9125b9808031659527cf2a9474085e32"
+version = "0.4.0"
+source = "git+https://github.com/logos-messaging/account-registry-lez?tag=v0.4.0#3383a04952fc64b317a5f1977e91cdf7448096b2"
 dependencies = [
  "account",
  "account-log",
@@ -42,7 +42,7 @@ dependencies = [
 [[package]]
 name = "account-registry-core"
 version = "0.4.1"
-source = "git+https://github.com/logos-messaging/account-registry-lez?tag=v0.4.0-rc.3#fadc9f6c9125b9808031659527cf2a9474085e32"
+source = "git+https://github.com/logos-messaging/account-registry-lez?tag=v0.4.0#3383a04952fc64b317a5f1977e91cdf7448096b2"
 dependencies = [
  "borsh",
  "lee_core",
